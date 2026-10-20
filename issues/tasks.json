@@ -1,0 +1,386 @@
+[
+  {
+    "key": "Z0",
+    "zestaw": 0,
+    "title": "[Z0] Setup repo: konwencje, IO, walidacja grafu prostego",
+    "points": "–",
+    "description": "Ustalić konwencje z `docs/FORMATY_DANYCH.md` (numeracja od 1, formaty plików), zaimplementować `common/io.py` i `common/validation.py`, podpiąć CI. Wszystko inne na tym stoi.",
+    "acceptance": [
+      "Parsery czytają pliki z `data/examples/zestaw1/` (numer wiersza i kropka opcjonalne)",
+      "Walidacja odrzuca pętle i krawędzie wielokrotne",
+      "CI zielone"
+    ],
+    "depends_on": [],
+    "soft_depends": [],
+    "source": "",
+    "labels": [
+      "setup"
+    ]
+  },
+  {
+    "key": "Z1.1",
+    "zestaw": 1,
+    "title": "[Z1.1] Reprezentacje grafów prostych + konwersje",
+    "points": "6 (3 reprezentacje × 2 pkt)",
+    "description": "Kodowanie grafu prostego macierzą sąsiedztwa, macierzą incydencji i listą sąsiedztwa + moduł zmieniający dowolne kodowanie na pozostałe. Jedno wywołanie = jedna reprezentacja na wejściu, na wyjściu dwie pozostałe. Kolejność kolumn macierzy incydencji dowolna.",
+    "acceptance": [
+      "Każda z 3 reprezentacji wczytywana i wypisywana",
+      "Konwersje we wszystkie strony (6 funkcji)",
+      "Przykład 12 wierzchołków z PDF daje listing 2 i 3 (macierz incydencji z dokładnością do kolejności kolumn)"
+    ],
+    "depends_on": [
+      "Z0"
+    ],
+    "soft_depends": [],
+    "source": "Materiały prowadzącej, zestaw 1 (zad. 1)",
+    "labels": [
+      "zestaw-1"
+    ]
+  },
+  {
+    "key": "Z1.2",
+    "zestaw": 1,
+    "title": "[Z1.2] Wizualizacja grafu na okręgu",
+    "points": "2",
+    "description": "Wizualizacja grafów prostych z wierzchołkami równomiernie rozłożonymi na okręgu: α = 2π/n, xᵢ = x₀ + r·cos(iα), yᵢ = y₀ + r·sin(iα). Rysunek jak rys. 1 w PDF (okrąg, numerowane wierzchołki).",
+    "acceptance": [
+      "Rysunek zapisywany do `output/`",
+      "Działa dla wejścia w każdej z 3 reprezentacji"
+    ],
+    "depends_on": [
+      "Z1.1"
+    ],
+    "soft_depends": [],
+    "source": "Wzory ze slajdów prowadzącej (zestaw 1, zad. 2)",
+    "labels": [
+      "zestaw-1"
+    ]
+  },
+  {
+    "key": "Z1.3",
+    "zestaw": 1,
+    "title": "[Z1.3] Grafy losowe G(n,l) i G(n,p)",
+    "points": "2 (2 × 1 pkt)",
+    "description": "Model G(n,l): n wierzchołków, l krawędzi (l ∈ [0, n(n−1)/2]). Model G(n,p): każda z możliwych krawędzi z prawdopodobieństwem p. Bez pętli i krawędzi wielokrotnych. Wyjście: reprezentacja lub rysunek.",
+    "acceptance": [
+      "Oba modele z parametrem seed",
+      "Poprawna liczba krawędzi dla G(n,l); skrajne p=0 i p=1",
+      "Wyjście w dowolnej reprezentacji z Z1.1; opcjonalnie rysunek z Z1.2"
+    ],
+    "depends_on": [
+      "Z1.1"
+    ],
+    "soft_depends": [
+      "Z1.2"
+    ],
+    "source": "Model Erdősa–Rényi (slajdy prowadzącej)",
+    "labels": [
+      "zestaw-1"
+    ]
+  },
+  {
+    "key": "P1",
+    "zestaw": 1,
+    "title": "[P1] Prezentacja zestawu 1 (max 15 min)",
+    "points": "–",
+    "description": "Przygotowanie prezentacji i oddanie zestawu 1. Checklista: `docs/PREZENTACJA.md`.",
+    "acceptance": [
+      "Każdy z zespołu zna cały projekt",
+      "`docs/ZRODLA.md` uzupełnione dla zestawu 1",
+      "Tag `zestaw-1`"
+    ],
+    "depends_on": [
+      "Z1.1",
+      "Z1.2",
+      "Z1.3"
+    ],
+    "soft_depends": [],
+    "source": "",
+    "labels": [
+      "prezentacja",
+      "zestaw-1"
+    ]
+  },
+  {
+    "key": "Z2.1",
+    "zestaw": 2,
+    "title": "[Z2.1] Ciąg graficzny + konstrukcja grafu",
+    "points": "do ustalenia",
+    "description": "Sprawdzić, czy sekwencja liczb naturalnych jest ciągiem graficznym (algorytm `degree_seq` z materiałów, skrót: nieparzysta liczba nieparzystych stopni ⇒ nie). Jeśli tak – zbudować graf prosty o tych stopniach.",
+    "acceptance": [
+      "4 2 2 3 2 1 4 2 2 2 2 → graficzny, graf zbudowany",
+      "4 4 3 1 2 → niegraficzny",
+      "Wyjście w reprezentacji z Z1.1"
+    ],
+    "depends_on": [
+      "Z1.1"
+    ],
+    "soft_depends": [
+      "Z1.2"
+    ],
+    "source": "Cormen, Leiserson, Rivest – Wprowadzenie do algorytmów (wg materiałów prow.)",
+    "labels": [
+      "zestaw-2"
+    ]
+  },
+  {
+    "key": "Z2.2",
+    "zestaw": 2,
+    "title": "[Z2.2] Randomizacja krawędzi (zamiana ab,cd → ad,bc)",
+    "points": "do ustalenia",
+    "description": "Wielokrotnie losowo wybierać parę krawędzi ab i cd i zamieniać na ad i bc, zachowując stopnie wierzchołków. Nie wolno tworzyć pętli ani krawędzi wielokrotnych (odrzucać takie zamiany). Wejście: liczba randomizacji + graf w dowolnej postaci.",
+    "acceptance": [
+      "Stopnie niezmienione po randomizacji",
+      "Brak pętli i multikrawędzi",
+      "Można połączyć z Z2.1 (wejście = ciąg graficzny)"
+    ],
+    "depends_on": [
+      "Z1.1"
+    ],
+    "soft_depends": [
+      "Z2.1"
+    ],
+    "source": "",
+    "labels": [
+      "zestaw-2"
+    ]
+  },
+  {
+    "key": "Z2.3",
+    "zestaw": 2,
+    "title": "[Z2.3] Spójne składowe / największa spójna składowa",
+    "points": "do ustalenia",
+    "description": "Oznaczanie spójnych składowych (DFS: `components` + `components_R`) i wskazanie największej. Wyjście: wypisanie `numer) wierzchołki` + numer największej (listing 1) lub kolory na rysunku.",
+    "acceptance": [
+      "Wyjście zgodne z `data/examples/zestaw2/components_expected.txt`",
+      "Działa dla grafu wejściowego w dowolnej postaci"
+    ],
+    "depends_on": [
+      "Z1.1"
+    ],
+    "soft_depends": [
+      "Z2.1"
+    ],
+    "source": "Cormen et al. – DFS (wg materiałów prow.)",
+    "labels": [
+      "zestaw-2"
+    ]
+  },
+  {
+    "key": "Z2.4",
+    "zestaw": 2,
+    "title": "[Z2.4] Losowy graf eulerowski + cykl Eulera",
+    "points": "do ustalenia",
+    "description": "Używając programów z zad. 1–3: wylosować parzyste stopnie (n podane lub losowane), zbudować graf (Z2.1), zrandomizować (Z2.2), wziąć największą spójną składową (Z2.3) i znaleźć cykl Eulera algorytmem Fleury'ego (przechodź most tylko gdy nie ma innej możliwości).",
+    "acceptance": [
+      "Wypisany cykl używa każdej krawędzi dokładnie raz i wraca do startu",
+      "Przykład n=8, stopnie 4 2 6 2 6 2 4 2"
+    ],
+    "depends_on": [
+      "Z2.1",
+      "Z2.2",
+      "Z2.3"
+    ],
+    "soft_depends": [],
+    "source": "R. J. Wilson – Wprowadzenie do teorii grafów (tw. Fleury'ego)",
+    "labels": [
+      "zestaw-2"
+    ]
+  },
+  {
+    "key": "Z2.5",
+    "zestaw": 2,
+    "title": "[Z2.5] Losowe grafy k-regularne",
+    "points": "do ustalenia",
+    "description": "Wejście: n i k. Wynik: losowy graf k-regularny (np. ciąg (k,…,k) → Z2.1 → randomizacja Z2.2). Obsłużyć przypadek, gdy n·k jest nieparzyste lub k ≥ n.",
+    "acceptance": [
+      "Wszystkie stopnie = k",
+      "Czytelny błąd dla niemożliwych parametrów",
+      "Przykład n=7, k=2"
+    ],
+    "depends_on": [
+      "Z2.1",
+      "Z2.2"
+    ],
+    "soft_depends": [],
+    "source": "",
+    "labels": [
+      "zestaw-2"
+    ]
+  },
+  {
+    "key": "Z2.6",
+    "zestaw": 2,
+    "title": "[Z2.6] Sprawdzanie grafu hamiltonowskiego (małe grafy)",
+    "points": "do ustalenia",
+    "description": "Brute force: DFS ze stosem od dowolnego wierzchołka; gdy stos ma wszystkie wierzchołki – sprawdzić krawędź do startu; w przeciwnym razie backtracking. Wyjście: tak/nie + cykl Hamiltona. Graf z reprezentacji wejściowej lub losowy.",
+    "acceptance": [
+      "Przykład 8 wierzchołków z PDF (cykl 1-2-3-7-4-6-8-5-1 jest poprawny)",
+      "Poprawne „nie” dla grafu niehamiltonowskiego (np. ścieżka)"
+    ],
+    "depends_on": [
+      "Z1.1"
+    ],
+    "soft_depends": [
+      "Z1.3",
+      "Z1.2"
+    ],
+    "source": "Opis w materiałach prow. (zestaw 2, pkt 4)",
+    "labels": [
+      "zestaw-2"
+    ]
+  },
+  {
+    "key": "P2",
+    "zestaw": 2,
+    "title": "[P2] Prezentacja zestawu 2 (max 15 min)",
+    "points": "–",
+    "description": "Przygotowanie prezentacji i oddanie zestawu 2. Checklista: `docs/PREZENTACJA.md`.",
+    "acceptance": [
+      "Każdy z zespołu zna cały projekt",
+      "`docs/ZRODLA.md` uzupełnione dla zestawu 2",
+      "Tag `zestaw-2`"
+    ],
+    "depends_on": [
+      "Z2.1",
+      "Z2.2",
+      "Z2.3",
+      "Z2.4",
+      "Z2.5",
+      "Z2.6"
+    ],
+    "soft_depends": [],
+    "source": "",
+    "labels": [
+      "prezentacja",
+      "zestaw-2"
+    ]
+  },
+  {
+    "key": "Z3.1",
+    "zestaw": 3,
+    "title": "[Z3.1] Spójny graf losowy z wagami 1–10",
+    "points": "do ustalenia",
+    "description": "Korzystając z programów z poprzednich zestawów wygenerować spójny graf losowy (G(n,p)/G(n,l) + sprawdzenie spójności) i przypisać krawędziom losowe wagi naturalne z [1,10]. Cały program w jednym uruchomieniu pracuje na jednym takim grafie.",
+    "acceptance": [
+      "Graf zawsze spójny",
+      "Wagi z [1,10]",
+      "Wyjście: reprezentacja z wagami lub rysunek (rys. 1 w PDF)"
+    ],
+    "depends_on": [
+      "Z1.3",
+      "Z2.3"
+    ],
+    "soft_depends": [
+      "Z1.2",
+      "Z2.1",
+      "Z2.2"
+    ],
+    "source": "",
+    "labels": [
+      "zestaw-3"
+    ]
+  },
+  {
+    "key": "Z3.2",
+    "zestaw": 3,
+    "title": "[Z3.2] Algorytm Dijkstry",
+    "points": "do ustalenia",
+    "description": "Najkrótsze ścieżki od zadanego wierzchołka (parametr lub stały numer) do pozostałych; wypisać długości i ścieżki w formacie `d(i) = … ==> [1 - 2 - 5]`. Procedury `init`, `relax`, `dijkstra` wg materiałów.",
+    "acceptance": [
+      "Wyjście zgodne z `data/examples/zestaw3/expected.txt`",
+      "Test na grafie z rys. 1"
+    ],
+    "depends_on": [
+      "Z3.1"
+    ],
+    "soft_depends": [],
+    "source": "Cormen, Leiserson, Rivest – Wprowadzenie do algorytmów",
+    "labels": [
+      "zestaw-3"
+    ]
+  },
+  {
+    "key": "Z3.3",
+    "zestaw": 3,
+    "title": "[Z3.3] Macierz odległości",
+    "points": "do ustalenia",
+    "description": "Macierz odległości między wszystkimi parami wierzchołków (Dijkstra z każdego wierzchołka). Wiersz w, kolumna k = długość najkrótszej ścieżki w→k.",
+    "acceptance": [
+      "Zgodność z `distance_matrix_12.txt`",
+      "Macierz symetryczna, zera na przekątnej"
+    ],
+    "depends_on": [
+      "Z3.2"
+    ],
+    "soft_depends": [],
+    "source": "",
+    "labels": [
+      "zestaw-3"
+    ]
+  },
+  {
+    "key": "Z3.4",
+    "zestaw": 3,
+    "title": "[Z3.4] Centrum i centrum minimax",
+    "points": "do ustalenia",
+    "description": "Centrum = wierzchołek o minimalnej sumie odległości do pozostałych; centrum minimax = wierzchołek o minimalnej odległości do najdalszego. Wyjście jak listing 3 w PDF.",
+    "acceptance": [
+      "Dla grafu z rys. 1: centrum = 5 (suma 55), minimax = 8 (odległość 9)"
+    ],
+    "depends_on": [
+      "Z3.3"
+    ],
+    "soft_depends": [],
+    "source": "",
+    "labels": [
+      "zestaw-3"
+    ]
+  },
+  {
+    "key": "Z3.5",
+    "zestaw": 3,
+    "title": "[Z3.5] Minimalne drzewo rozpinające (Prim lub Kruskal)",
+    "points": "do ustalenia",
+    "description": "MST wybranym algorytmem (Prim: krawędź lekka między T i W; Kruskal: sortowanie + unikanie cykli, stop po n−1 krawędziach). Wyjście: lista krawędzi lub rysunek z wyróżnionym drzewem (rys. 2).",
+    "acceptance": [
+      "n−1 krawędzi, spójne, bez cyklu",
+      "Dla grafu z rys. 1 suma wag = 26"
+    ],
+    "depends_on": [
+      "Z3.1"
+    ],
+    "soft_depends": [
+      "Z1.2"
+    ],
+    "source": "V. K. Balakrishnan – Schaum's Outline of Graph Theory",
+    "labels": [
+      "zestaw-3"
+    ]
+  },
+  {
+    "key": "P3",
+    "zestaw": 3,
+    "title": "[P3] Prezentacja zestawu 3 (max 15 min)",
+    "points": "–",
+    "description": "Przygotowanie prezentacji i oddanie zestawu 3. Checklista: `docs/PREZENTACJA.md`.",
+    "acceptance": [
+      "Każdy z zespołu zna cały projekt",
+      "`docs/ZRODLA.md` uzupełnione dla zestawu 3",
+      "Tag `zestaw-3`"
+    ],
+    "depends_on": [
+      "Z3.1",
+      "Z3.2",
+      "Z3.3",
+      "Z3.4",
+      "Z3.5"
+    ],
+    "soft_depends": [],
+    "source": "",
+    "labels": [
+      "prezentacja",
+      "zestaw-3"
+    ]
+  }
+]

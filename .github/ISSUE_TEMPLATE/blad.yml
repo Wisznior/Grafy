@@ -1,0 +1,11 @@
+name: Błąd
+description: Coś nie działa
+labels: ["bug"]
+body:
+  - type: textarea
+    id: opis
+    attributes: { label: Co się dzieje, description: Wejście, oczekiwany i faktyczny wynik }
+    validations: { required: true }
+  - type: input
+    id: zadanie
+    attributes: { label: Którego zadania dotyczy, placeholder: "np. Z2.4" }

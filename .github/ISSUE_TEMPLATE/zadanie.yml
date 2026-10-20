@@ -1,0 +1,59 @@
+name: Zadanie z zestawu
+description: Task na konkretne zadanie z zestawu laboratoryjnego
+title: "[Z?.?] "
+labels: ["zadanie"]
+body:
+  - type: dropdown
+    id: zestaw
+    attributes:
+      label: Zestaw
+      options: ["1", "2", "3", "4", "5", "6"]
+    validations: { required: true }
+  - type: input
+    id: zadanie
+    attributes:
+      label: Numer zadania
+      placeholder: "np. 2.4"
+    validations: { required: true }
+  - type: input
+    id: punkty
+    attributes:
+      label: Punkty
+      description: "Ile pkt za to zadanie (jeśli podano w treści zestawu)"
+      placeholder: "np. 2 / nie podano"
+  - type: textarea
+    id: tresc
+    attributes:
+      label: Treść zadania (z zestawu)
+    validations: { required: true }
+  - type: textarea
+    id: wejscie_wyjscie
+    attributes:
+      label: Wejście / wyjście
+      description: "Z przykładowego wejścia prowadzącej; link do pliku w data/examples/"
+  - type: textarea
+    id: zalezy_od
+    attributes:
+      label: "Zależy od (BLOKUJE)"
+      description: "Tego taska nie da się zrobić bez tamtych. Format: `- [ ] #12 – krótki opis`. Dodaj label `blocked`."
+      placeholder: "- [ ] #  – "
+  - type: textarea
+    id: przydatne
+    attributes:
+      label: Przydatne (opcjonalne zależności)
+      description: "Nie blokuje, ale np. daje wizualizację / dane wejściowe."
+  - type: input
+    id: zrodlo
+    attributes:
+      label: Źródło algorytmu (wymagane na prezentacji)
+      description: "Link albo tytuł + autor książki → dopisz też do docs/ZRODLA.md"
+  - type: checkboxes
+    id: dod
+    attributes:
+      label: Definition of Done
+      options:
+        - label: Algorytm napisany samodzielnie
+        - label: Testy na przykładzie z PDF (zdjęty `@todo`)
+        - label: Komenda CLI do demo
+        - label: Wpis w docs/ZRODLA.md
+        - label: PR zreviewowany przez drugą osobę
