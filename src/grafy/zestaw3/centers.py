@@ -1,14 +1,13 @@
-"""Z3.4 - centrum (min suma odleglosci) i centrum minimax (min odleglosc do najdalszego). Zalezy od: Z3.3."""
-from __future__ import annotations
-
 from grafy.common.types import Matrix
 
 
 def center(d: Matrix) -> tuple[int, int]:
-    """(wierzcholek, suma odleglosci)."""
-    raise NotImplementedError
+    """(wierzcholek od 1, suma odleglosci do pozostalych)."""
+    sums = [sum(r) for r in d]
+    return sums.index(min(sums)) + 1, min(sums)
 
 
 def minimax_center(d: Matrix) -> tuple[int, int]:
-    """(wierzcholek, odleglosc do najdalszego)."""
-    raise NotImplementedError
+    """(wierzcholek od 1, odleglosc do najdalszego)."""
+    far = [max(r) for r in d]
+    return far.index(min(far)) + 1, min(far)
