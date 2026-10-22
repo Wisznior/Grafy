@@ -1,6 +1,6 @@
 # Grafy i ich zastosowania
 
-To repozytorium ma już implementację algorytmów z zestawów 1–3, ale żeby było wygodnie do prezentacji i testowania, dodałem także prosty interaktywny GUI w Pythonie z wykorzystaniem Streamlit.
+To repozytorium ma już implementację algorytmów z zestawów 1–3, a dodatkowo przygotowałem interaktywną aplikację w Pythonie z użyciem Streamlit. Aplikacja ma podział na zestawy zadań i pozwala prezentować konkretne ćwiczenia z grafów w przejrzystej formie.
 
 ## Uruchomienie GUI
 
@@ -11,26 +11,38 @@ pip install -e .
 streamlit run src/grafy/gui.py
 ```
 
-Po uruchomieniu otworzy się aplikacja w przeglądarce, w której możesz:
+## Struktura aplikacji
 
-- generować grafy losowe G(n, p) i G(n, l)
-- budować graf z ciągu graficznego
-- tworzyć grafy k-regularne
-- zmieniać graf ręcznie przez dodawanie/usuwanie krawędzi
-- oglądać graf na okręgu
-- sprawdzać spójność, cykl Eulera, cykl Hamiltona
-- uruchamiać algorytm Dijkstry na grafie ważonym
+Po wejściu do programu widzisz:
 
-## Funkcje aplikacji
+- stronę główną z zestawami 1, 2 i 3,
+- rozdział na konkretne zadania w ramach każdego zestawu,
+- opis zadania, co można zmieniać i co uruchamiać,
+- wizualizację grafów na okręgu,
+- analizę algorytmiczną dla zadań z danego zestawu.
 
-- sidebar do zmiany parametrów grafu
-- przyciski akcji typu „Generate”, „Randomize”, „Check”
-- podgląd macierzy sąsiedztwa, listy sąsiedztwa i macierzy incydencji
-- wizualizacja grafu z numeracją wierzchołków
-- szybkie analizy: największa składowa, Euler, Hamilton, Dijkstra
+## Zestaw 1
 
-To jest najprostsza i najszybsza opcja GUI w Pythonie, która jest bardzo dobra do laboratorium i prezentacji. Jeśli w przyszłości chcesz, można łatwo rozbudować to o:
+- kodowanie grafów w reprezentacjach: macierz sąsiedztwa, lista sąsiedztwa, macierz incydencji,
+- konwersja między reprezentacjami,
+- wizualizacja grafu na okręgu,
+- generowanie grafów G(n, l) i G(n, p).
 
-- drag & drop wierzchołków,
-- edycję krawędzi na canvasie,
-- bardziej zaawansowaną warstwę frontendową w JavaScript (React / Cytoscape / D3.js).
+## Zestaw 2
+
+- sprawdzanie ciągu graficznego,
+- randomizacja grafu zachowująca stopnie wierzchołków,
+- największa spójna składowa,
+- generacja i analiza grafu eulerowskiego,
+- grafy k-regularne,
+- sprawdzanie hamiltonowości.
+
+## Zestaw 3
+
+- graf ważony z losowymi wagami,
+- algorytm Dijkstry,
+- macierz odległości,
+- centrum i centrum minimax,
+- minimalne drzewo rozpinające.
+
+To daje wygodną prezentację ćwiczeń podczas laboratorium i pozwala szybko zmieniać dane wejściowe, wizualizować graf i uruchamiać algorytmy.
