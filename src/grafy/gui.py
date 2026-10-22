@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 from grafy.common.types import AdjList, Matrix
+from grafy.zestaw1.random_graphs import gnl, gnp
 from grafy.zestaw1.representations import (
     incidence_to_list,
     list_to_incidence,
@@ -317,14 +318,62 @@ def task1_section() -> None:
 def task2_section() -> None:
     st.markdown("### 2. Wizualizacja grafów prostych na okręgu")
     st.write("Program do wizualizacji grafów prostych z wierzchołkami równomiernie rozmieszczonymi na okręgu.")
-    fig = render_graph(DEFAULT_GRAPH, title="Wizualizacja na okręgu")
+
+    preset_name = st.selectbox("Wybierz preset", list(PRESETS.keys()), key="circle_preset")
+    if st.button("Załaduj preset do wizualizacji"):
+        st.session_state["circle_graph"] = PRESETS[preset_name]
+    if "circle_graph" not in st.session_state:
+        st.session_state["circle_graph"] = DEFAULT_GRAPH
+
+    fig = render_graph(st.session_state["circle_graph"], title="Wizualizacja na okręgu")
     st.pyplot(fig)
 
 
 def task3_section() -> None:
     st.markdown("### 3. Generowanie grafów losowych G(n, l) oraz G(n, p)")
     st.write("Tutaj można wygenerować grafy losowe z parametrami n, l lub n, p i zobaczyć ich reprezentacje.")
-    st.info("To miejsce jest gotowe do dalszego rozwinięcia o generator losowy i predefiniowane eksperymenty.")
+
+    model = st.radio("Model grafu", ["G(n, l)", "G(n, p)"], horizontal=True)
+    n = st.number_input("n", min_value=1, max_value=30, value=8, step=1)
+
+    if model == "G(n, l)":
+        max_edges = n * (n - 1) // 2
+        l = st.number_input("l", min_value=0, max_value=max_edges, value=min(10, max_edges), step=1)
+        p = None
+    else:
+        l = None
+        p = st.slider("p", min_value=0.0, max_value=1.0, value=0.4, step=0.01)
+
+    seed = st.number_input("seed", min_value=0, max_value=100000, value=0, step=1)
+
+    if st.button("Wygeneruj graf"):
+        try:
+            if model == "G(n, l)":
+                graph = gnl(n, l, seed=seed)
+            else:
+                graph = gnp(n, float(p), seed=seed)
+            st.session_state["random_graph"] = normalize_graph(graph)
+            st.success("Graf został wygenerowany.")
+        except Exception as exc:
+            st.error(f"Błąd generowania: {exc}")
+
+    if "random_graph" not in st.session_state:
+        st.session_state["random_graph"] = normalize_graph(gnl(8, 10, seed=0))
+
+    graph = st.session_state["random_graph"]
+    st.subheader("Lista sąsiedztwa")
+    st.code(adj_to_text(graph))
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Macierz sąsiedztwa")
+        st.code(graph_to_matrix_text(graph))
+    with col2:
+        st.subheader("Macierz incydencji")
+        st.code(graph_to_incidence_text(graph))
+
+    st.subheader("Wizualizacja")
+    st.pyplot(render_graph(graph, title="Graf losowy"))
 
 
 def main() -> None:
