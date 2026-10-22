@@ -23,10 +23,12 @@ from grafy.zestaw3.centers import center, minimax_center
 from grafy.zestaw3.dijkstra import dijkstra, shortest_path
 from grafy.zestaw3.distances import distance_matrix
 from grafy.zestaw3.mst import minimum_spanning_tree
-from grafy.zestaw3.weighted_graph import edges_to_matrix, random_connected_weighted_graph
+from grafy.zestaw3.weighted_graph import random_connected_weighted_graph
 
 
-# ---------- podstawowe helper-y ----------
+# -------------------------------
+# Helpers shared across all sets
+# -------------------------------
 def normalize_graph(adj: AdjList | None) -> AdjList:
     if not adj:
         return {}
@@ -239,9 +241,11 @@ def get_active_text(graph: AdjList, kind: str) -> str:
     return ""
 
 
-# ---------- Zestaw 1 ----------
+# -------------------------------
+# Zestaw 1 — 3 zadania
+# -------------------------------
 def task1_section() -> None:
-    st.markdown("### 1. Kodowanie grafów i konwersja")
+    st.markdown("### Zestaw 1 · Zadanie 1")
     st.write(
         "Napisz program kodujący graf prosty za pomocą macierzy sąsiedztwa, macierzy incydencji i listy sąsiedztwa. "
         "Stwórz moduł do zmiany danego kodowania na pozostałe."
@@ -260,7 +264,6 @@ def task1_section() -> None:
         ["lista sąsiedztwa", "macierz sąsiedztwa", "macierz incydencji"],
         key="rep_source",
     )
-
     st.text_area(
         "Wpisz dane grafu",
         value=get_active_text(st.session_state.graph, source_kind),
@@ -277,7 +280,7 @@ def task1_section() -> None:
             st.error(f"Błąd parsowania: {exc}")
 
     st.markdown("---")
-    st.subheader("Wizualizacja grafu")
+    st.subheader("Wizualizacja")
     st.pyplot(render_graph(st.session_state.graph, title="Graf prosty"))
 
     st.markdown("---")
@@ -325,9 +328,84 @@ def task1_section() -> None:
         st.code(matrix_to_text(converted))
 
 
-# ---------- Zestaw 2 ----------
+def task2_visualization_section() -> None:
+    st.markdown("### Zestaw 1 · Zadanie 2")
+    st.write("Program do wizualizacji grafów prostych z wierzchołkami równomiernie rozmieszczonymi na okręgu.")
+
+    preset_name = st.selectbox("Wybierz preset", list(PRESETS.keys()), key="circle_preset")
+    if st.button("Załaduj preset do wizualizacji"):
+        st.session_state["circle_graph"] = PRESETS[preset_name]
+    if "circle_graph" not in st.session_state:
+        st.session_state["circle_graph"] = DEFAULT_GRAPH
+
+    st.pyplot(render_graph(st.session_state["circle_graph"], title="Wizualizacja na okręgu"))
+
+
+def task3_random_graph_section() -> None:
+    st.markdown("### Zestaw 1 · Zadanie 3")
+    st.write("Tutaj można wygenerować losowe grafy z parametrami n, l lub n, p i zobaczyć ich reprezentacje.")
+
+    model = st.radio("Model grafu", ["G(n, l)", "G(n, p)"], horizontal=True)
+    n = st.number_input("n", min_value=1, max_value=30, value=8, step=1)
+
+    if model == "G(n, l)":
+        max_edges = n * (n - 1) // 2
+        l = st.number_input("l", min_value=0, max_value=max_edges, value=min(10, max_edges), step=1)
+        p = None
+    else:
+        l = None
+        p = st.slider("p", min_value=0.0, max_value=1.0, value=0.4, step=0.01)
+
+    seed = st.number_input("seed", min_value=0, max_value=100000, value=0, step=1)
+
+    if st.button("Wygeneruj graf"):
+        try:
+            if model == "G(n, l)":
+                g = gnl(n, l, seed=seed)
+            else:
+                g = gnp(n, float(p), seed=seed)
+            st.session_state["random_graph"] = normalize_graph(g)
+            st.success("Graf został wygenerowany.")
+        except Exception as exc:
+            st.error(f"Błąd generowania: {exc}")
+
+    if "random_graph" not in st.session_state:
+        st.session_state["random_graph"] = normalize_graph(gnl(8, 10, seed=0))
+
+    graph = st.session_state["random_graph"]
+    st.subheader("Lista sąsiedztwa")
+    st.code(adj_to_text(graph))
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Macierz sąsiedztwa")
+        st.code(graph_to_matrix_text(graph))
+    with col2:
+        st.subheader("Macierz incydencji")
+        st.code(graph_to_incidence_text(graph))
+
+    st.subheader("Wizualizacja")
+    st.pyplot(render_graph(graph, title="Graf losowy"))
+
+
+def render_set1() -> None:
+    st.markdown("## Zestaw 1")
+    st.caption("Grafy i ich zastosowania")
+
+    task_map = {
+        1: task1_section,
+        2: task2_visualization_section,
+        3: task3_random_graph_section,
+    }
+    task_no = st.radio("Wybierz zadanie", list(task_map.keys()), horizontal=True)
+    task_map[task_no]()
+
+
+# -------------------------------
+# Zestaw 2 — 6 zadań
+# -------------------------------
 def z2_task1() -> None:
-    st.markdown("### 1. Ciąg graficzny i budowanie grafu")
+    st.markdown("### Zestaw 2 · Zadanie 1")
     st.write(
         "Dla danej sekwencji liczb naturalnych sprawdź, czy jest ciągiem graficznym, a następnie zbuduj prosty graf o takich stopniach wierzchołków."
     )
@@ -346,7 +424,7 @@ def z2_task1() -> None:
 
 
 def z2_task2() -> None:
-    st.markdown("### 2. Randomizacja grafu prostego")
+    st.markdown("### Zestaw 2 · Zadanie 2")
     st.write(
         "Powtarzaj operację zamiany par krawędzi ab i cd na ad i bc, zachowując stopnie wierzchołków."
     )
@@ -365,8 +443,8 @@ def z2_task2() -> None:
 
 
 def z2_task3() -> None:
-    st.markdown("### 3. Największa spójna składowa")
-    st.write("Znajdź największą składową spójności grafu.")
+    st.markdown("### Zestaw 2 · Zadanie 3")
+    st.write("Znajdź największą spójną składową grafu prostego.")
     base = {
         1: [2],
         2: [1],
@@ -376,13 +454,13 @@ def z2_task3() -> None:
         6: [],
     }
     comp = components(base)
-    st.code("Skladowe:\n" + str(comp))
+    st.code("Składowe:\n" + str(comp))
     st.info(f"Największa składowa: {largest_component(base)}")
-    st.pyplot(render_graph(base, title="Największa składowa"))
+    st.pyplot(render_graph(base, title="Graf do sprawdzania komponentów"))
 
 
 def z2_task4() -> None:
-    st.markdown("### 4. Graf eulerowski i cykl Eulera")
+    st.markdown("### Zestaw 2 · Zadanie 4")
     st.write("Wygeneruj losowy graf eulerowski i znajdź cykl Eulera.")
     n = st.number_input("n", min_value=3, max_value=12, value=8)
     seed = st.number_input("seed", min_value=0, max_value=10000, value=0)
@@ -404,7 +482,7 @@ def z2_task4() -> None:
 
 
 def z2_task5() -> None:
-    st.markdown("### 5. Graf k-regularny")
+    st.markdown("### Zestaw 2 · Zadanie 5")
     st.write("Wygeneruj graf, w którym każdy wierzchołek ma dokładnie k sąsiadów.")
     n = st.number_input("Liczba wierzchołków n", min_value=2, max_value=20, value=8)
     k = st.number_input("Stopień k", min_value=0, max_value=10, value=2)
@@ -426,7 +504,7 @@ def z2_task5() -> None:
 
 
 def z2_task6() -> None:
-    st.markdown("### 6. Hamiltonowość grafu")
+    st.markdown("### Zestaw 2 · Zadanie 6")
     st.write("Sprawdź, czy mały graf jest hamiltonowski — znajdź cykl Hamiltona lub uzyskaj odpowiedź NIE.")
 
     graph = {
@@ -444,7 +522,6 @@ def z2_task6() -> None:
 def render_set2() -> None:
     st.markdown("## Zestaw 2")
     st.caption("Grafy i ich zastosowania")
-
     task_map = {
         1: z2_task1,
         2: z2_task2,
@@ -453,14 +530,15 @@ def render_set2() -> None:
         5: z2_task5,
         6: z2_task6,
     }
-
     task_no = st.radio("Wybierz zadanie", list(task_map.keys()), horizontal=True)
     task_map[task_no]()
 
 
-# ---------- Zestaw 3 ----------
+# -------------------------------
+# Zestaw 3 — 5 zadań
+# -------------------------------
 def z3_task1() -> None:
-    st.markdown("### 1. Losowy spójny graf z wagami")
+    st.markdown("### Zestaw 3 · Zadanie 1")
     st.write("Wygeneruj spójny graf losowy i przypisz każdej krawędzi losową wagę z przedziału 1..10.")
     n = st.number_input("n", min_value=2, max_value=30, value=12)
     p = st.slider("p", min_value=0.0, max_value=1.0, value=0.2, step=0.01)
@@ -486,7 +564,7 @@ def z3_task1() -> None:
 
 
 def z3_task2() -> None:
-    st.markdown("### 2. Algorytm Dijkstry")
+    st.markdown("### Zestaw 3 · Zadanie 2")
     st.write("Znajdź najkrótsze ścieżki od zadanego wierzchołka do wszystkich pozostałych.")
     if "z3_matrix" not in st.session_state:
         st.session_state["z3_matrix"] = random_connected_weighted_graph(12, p=0.2, seed=0)[1]
@@ -500,7 +578,7 @@ def z3_task2() -> None:
 
 
 def z3_task3() -> None:
-    st.markdown("### 3. Macierz odległości")
+    st.markdown("### Zestaw 3 · Zadanie 3")
     st.write("Wyznacz macierz odległości między wszystkimi parami wierzchołków.")
     if "z3_matrix" not in st.session_state:
         st.session_state["z3_matrix"] = random_connected_weighted_graph(12, p=0.2, seed=0)[1]
@@ -510,8 +588,8 @@ def z3_task3() -> None:
 
 
 def z3_task4() -> None:
-    st.markdown("### 4. Centrum i centrum minimax")
-    st.write("Znajdź wierzchołek o najmniejszej sumie odległości oraz o najmniejszej odległości do najdalszego wierzchołka.")
+    st.markdown("### Zestaw 3 · Zadanie 4")
+    st.write("Znajdź centrum grafu i centrum minimax.")
     if "z3_matrix" not in st.session_state:
         st.session_state["z3_matrix"] = random_connected_weighted_graph(12, p=0.2, seed=0)[1]
     w = st.session_state["z3_matrix"]
@@ -524,8 +602,8 @@ def z3_task4() -> None:
 
 
 def z3_task5() -> None:
-    st.markdown("### 5. Minimalne drzewo rozpinające")
-    st.write("Zastosuj algorytm Kruskala i wyznacz MST dla grafu ważonego.")
+    st.markdown("### Zestaw 3 · Zadanie 5")
+    st.write("Zastosuj algorytm Kruskala i wyznacz minimalne drzewo rozpinające.")
     if "z3_edges" not in st.session_state:
         edges, _ = random_connected_weighted_graph(12, p=0.2, seed=0)
         st.session_state["z3_edges"] = edges
@@ -539,7 +617,6 @@ def z3_task5() -> None:
 def render_set3() -> None:
     st.markdown("## Zestaw 3")
     st.caption("Grafy i ich zastosowania")
-
     task_map = {
         1: z3_task1,
         2: z3_task2,
@@ -547,25 +624,73 @@ def render_set3() -> None:
         4: z3_task4,
         5: z3_task5,
     }
-
     task_no = st.radio("Wybierz zadanie", list(task_map.keys()), horizontal=True)
     task_map[task_no]()
 
 
-# ---------- główny ekran ----------
+# -------------------------------
+# Landing page with all sets and tasks
+# -------------------------------
+def landing_page() -> None:
+    st.markdown("# Grafy lab — wybór zestawu i zadania")
+    st.write("Kliknij konkretne zadanie, aby przejść do jego treści i kalkulatora.")
+
+    set_tasks = {
+        "Zestaw 1": [
+            (1, "Kodowanie grafów i konwersja"),
+            (2, "Wizualizacja grafów prostych na okręgu"),
+            (3, "Generowanie grafów losowych G(n, l) i G(n, p)"),
+        ],
+        "Zestaw 2": [
+            (1, "Ciąg graficzny i budowa grafu"),
+            (2, "Randomizacja grafu prostego"),
+            (3, "Największa spójna składowa"),
+            (4, "Graf eulerowski i cykl Eulera"),
+            (5, "Graf k-regularny"),
+            (6, "Hamiltonowość grafu"),
+        ],
+        "Zestaw 3": [
+            (1, "Losowy spójny graf z wagami"),
+            (2, "Algorytm Dijkstry"),
+            (3, "Macierz odległości"),
+            (4, "Centrum i centrum minimax"),
+            (5, "Minimalne drzewo rozpinające"),
+        ],
+    }
+
+    for title, tasks in set_tasks.items():
+        st.markdown(f"### {title}")
+        cols = st.columns(3)
+        for idx, (task_no, desc) in enumerate(tasks):
+            with cols[idx % 3]:
+                if st.button(f"Zadanie {task_no}\n{desc}", key=f"main_{title}_{task_no}"):
+                    st.session_state["selected_set"] = title
+                    st.session_state["selected_task"] = task_no
+
+    if "selected_set" in st.session_state and "selected_task" in st.session_state:
+        st.markdown("---")
+        st.markdown(f"## Wybrane: {st.session_state['selected_set']} · Zadanie {st.session_state['selected_task']}")
+
+        if st.session_state["selected_set"] == "Zestaw 1":
+            render_set1()
+        elif st.session_state["selected_set"] == "Zestaw 2":
+            render_set2()
+        else:
+            render_set3()
+
+
+# -------------------------------
+# Main app
+# -------------------------------
 def main() -> None:
     st.set_page_config(page_title="Grafy Lab", page_icon="📈", layout="wide")
 
-    with st.sidebar:
-        st.title("Nawigacja")
-        choice = st.radio("Wybierz zestaw", ["Zestaw 1", "Zestaw 2", "Zestaw 3"])
+    if "selected_set" not in st.session_state:
+        st.session_state["selected_set"] = "Zestaw 1"
+    if "selected_task" not in st.session_state:
+        st.session_state["selected_task"] = 1
 
-    if choice == "Zestaw 1":
-        task1_section()
-    elif choice == "Zestaw 2":
-        render_set2()
-    else:
-        render_set3()
+    landing_page()
 
 
 if __name__ == "__main__":
