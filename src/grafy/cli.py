@@ -1,5 +1,6 @@
 """python -m grafy <komenda> ...  (wierzcholki od 1)."""
 import argparse
+from pathlib import Path
 
 from grafy.common import io
 from grafy.common.graph import edges_to_adj
@@ -18,6 +19,16 @@ from grafy.zestaw3.distances import distance_matrix
 from grafy.zestaw3.mst import minimum_spanning_tree
 from grafy.zestaw3.weighted_graph import (edges_to_matrix, random_connected_weighted_graph,
                                           read_weighted_edges)
+from grafy.zestaw4.bellman_ford import bellman_ford
+from grafy.zestaw4.directed_graph import (adjacency_matrix, gnp_digraph, incidence_matrix,
+                                          random_strongly_connected_weighted_digraph)
+from grafy.zestaw4.johnson import johnson
+from grafy.zestaw4.scc import strongly_connected_components
+from grafy.zestaw5.flow_network import draw_flow_network, random_flow_network
+from grafy.zestaw5.max_flow import ford_fulkerson
+from grafy.zestaw6.pagerank import (pagerank_power_iteration, pagerank_random_walk,
+                                    ranking, read_digraph)
+from grafy.zestaw6.tsp import draw_tour, read_points, simulated_annealing, tour_length
 
 READ = {"matrix": io.read_adjacency_matrix, "list": io.read_adjacency_list,
         "incidence": io.read_incidence_matrix}
@@ -116,6 +127,84 @@ def cmd_set3(a):
         print("Rysunek:", a.draw)
 
 
+def cmd_digraph(a):
+    graph = gnp_digraph(a.n, a.p, a.seed)
+    print("Lista sasiedztwa:")
+    for u, neighbors in graph.items():
+        print(f"{u}: " + (" ".join(map(str, neighbors)) if neighbors else "-"))
+    print("Macierz sasiedztwa:\n" + io.format_matrix(adjacency_matrix(graph)))
+    print("Macierz incydencji (-1 zrodlo, +1 cel):\n" +
+          io.format_matrix(incidence_matrix(graph)))
+    print("Silnie spojne skladowe:")
+    for number, component in enumerate(strongly_connected_components(graph), 1):
+        print(f"{number}) " + " ".join(map(str, component)))
+
+
+def cmd_set4(a):
+    graph, arcs = random_strongly_connected_weighted_digraph(a.n, a.p, a.seed)
+    print("Losowy silnie spojny digraf (luki u v waga):")
+    for u, v, weight in arcs:
+        print(u, v, weight)
+    print("Silnie spojne skladowe:")
+    for number, component in enumerate(strongly_connected_components(graph), 1):
+        print(f"{number}) " + " ".join(map(str, component)))
+    distances, _ = bellman_ford(a.n, arcs, a.source)
+    print(f"Bellman-Ford od wierzcholka {a.source}:")
+    for vertex in range(1, a.n + 1):
+        print(f"d({vertex}) = {distances[vertex]}")
+    print("Macierz odleglosci Johnsona:\n" + io.format_matrix(johnson(a.n, arcs)))
+
+
+def _project_file(*parts):
+    return Path(__file__).resolve().parents[2].joinpath(*parts)
+
+
+def cmd_set5(a):
+    network = random_flow_network(a.layers, a.seed)
+    result = ford_fulkerson(network)
+    label = lambda vertex: "s" if vertex == network.source else (
+        "t" if vertex == network.sink else str(vertex))
+    print("Zrodlo: s, ujscie: t")
+    print("Luki (u v przeplyw/przepustowosc):")
+    for (u, v), capacity in sorted(network.capacities.items()):
+        print(f"{label(u)} {label(v)} {result.flows[(u, v)]}/{capacity}")
+    print("Sciezki powiekszajace (w kolejnosci znalezienia):")
+    for path, amount in result.augmentations:
+        print(" ".join(map(label, path)), f"(+{amount})")
+    print(f"Maksymalny przeplyw: {result.value}")
+    draw_flow_network(network, a.draw, result.flows)
+    print("Rysunek:", a.draw)
+
+
+def cmd_set6(a):
+    graph_path = Path(a.graph_file) if a.graph_file else _project_file(
+        "data", "examples", "zestaw6", "pagerank_graph.txt")
+    points_path = Path(a.points_file) if a.points_file else _project_file(
+        "data", "examples", "zestaw6", "tsp_points.txt")
+    graph = read_digraph(graph_path)
+    walk_scores = pagerank_random_walk(graph, a.damping, a.walk_steps, a.seed)
+    power_scores, iterations = pagerank_power_iteration(graph, a.damping)
+    print(f"PageRank: bledzenie losowe, krokow = {a.walk_steps}")
+    for node, score in ranking(walk_scores):
+        print(f"{node} -> PageRank = {score:.6f}")
+    print(f"PageRank: iteracja potegowa, iteracji = {iterations}")
+    for node, score in ranking(power_scores):
+        print(f"{node} -> PageRank = {score:.6f}")
+
+    points = read_points(points_path)
+    initial = list(range(len(points)))
+    initial_length = tour_length(points, initial)
+    tour, length = simulated_annealing(points, a.iterations,
+                                       None if a.seed is None else a.seed + 1,
+                                       initial_tour=initial)
+    print(f"TSP: {len(points)} punktow, dlugosc poczatkowa = {initial_length:.3f}")
+    print(f"Dlugosc znalezionej trasy = {length:.3f}")
+    print("Kolejnosc wierzcholkow (indeksy od 1): " +
+          " ".join([*(str(vertex + 1) for vertex in tour), str(tour[0] + 1)]))
+    draw_tour(points, tour, a.draw)
+    print("Rysunek:", a.draw)
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="grafy")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -161,6 +250,27 @@ def build_parser():
     sp.add_argument("--p", type=float, default=0.3)
     sp.add_argument("--s", type=int, default=1, help="wierzcholek startowy Dijkstry")
     sp.add_argument("--edges", help="plik 'u v waga' zamiast grafu losowego")
+
+    sp = add("digraph", cmd_digraph, seed=True)
+    sp.add_argument("n", type=int)
+    sp.add_argument("p", type=float)
+
+    sp = add("set4", cmd_set4, draw=False, seed=True)
+    sp.add_argument("--n", type=int, default=12)
+    sp.add_argument("--p", type=float, default=0.25)
+    sp.add_argument("--source", type=int, default=1)
+
+    sp = add("set5", cmd_set5, draw=False, seed=True)
+    sp.add_argument("--layers", type=int, default=3, help="liczba warstw posrednich N (N >= 2)")
+    sp.add_argument("--draw", default="output/zestaw5_flow.png", metavar="PLIK.png")
+
+    sp = add("set6", cmd_set6, draw=False, seed=True)
+    sp.add_argument("--graph-file", help="lista sasiedztwa w formacie 'wierzcholek: sasiedzi'")
+    sp.add_argument("--points-file", help="plik z dwiema wspolrzednymi na wiersz")
+    sp.add_argument("--damping", type=float, default=0.15)
+    sp.add_argument("--walk-steps", type=int, default=1_000_000)
+    sp.add_argument("--iterations", type=int, default=200_000, help="liczba prob 2-opt")
+    sp.add_argument("--draw", default="output/zestaw6_tsp.png", metavar="PLIK.png")
     return p
 
 
