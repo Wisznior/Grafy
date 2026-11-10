@@ -112,7 +112,6 @@ def graph_to_incidence_text(graph: AdjList) -> str:
 
 
 def render_graph(adj: AdjList, title: str = "Graf", edge_labels: dict | None = None, highlight_edges=None):
-    """Render graph in a compact figure so it fits comfortably in the Streamlit page."""
     graph = normalize_graph(adj)
     fig, ax = plt.subplots(figsize=(4.2, 3.8), dpi=100)
     if not graph:
@@ -171,13 +170,14 @@ PRESETS = {
     "Pełny graf K5": {1: [2, 3, 4, 5], 2: [1, 3, 4, 5], 3: [1, 2, 4, 5], 4: [1, 2, 3, 5], 5: [1, 2, 3, 4]},
 }
 
-# Zestaw 1: trzy zadania
+# Zestaw 1
 
 def z1_task1():
     st.markdown("### 1. Kodowanie grafów i konwersja")
     st.write("Koduj graf prosty listą sąsiedztwa, macierzą sąsiedztwa i macierzą incydencji; edytuj reprezentację i konwertuj ją na pozostałe.")
     preset = st.selectbox("Preset grafu", list(PRESETS), key="z1_preset")
-    if "z1_graph" not in st.session_state: st.session_state["z1_graph"] = DEFAULT_GRAPH
+    if "z1_graph" not in st.session_state:
+        st.session_state["z1_graph"] = DEFAULT_GRAPH
     if st.button("Załaduj preset", key="z1_load"):
         st.session_state["z1_graph"] = PRESETS[preset]
         st.session_state.pop("z1_input", None)
@@ -190,7 +190,8 @@ def z1_task1():
         try:
             st.session_state["z1_graph"] = graph_from_representation(kind, st.session_state["z1_input"])
             st.success("Graf zaktualizowany.")
-        except ValueError as exc: st.error(str(exc))
+        except ValueError as exc:
+            st.error(str(exc))
     g = st.session_state["z1_graph"]
     st.pyplot(render_graph(g, "Graf prosty"), use_container_width=False)
     tabs = st.tabs(["Lista", "Macierz sąsiedztwa", "Macierz incydencji"])
@@ -203,7 +204,8 @@ def z1_task2():
     st.markdown("### 2. Wizualizacja grafu na okręgu")
     st.write("Wybierz graf i zobacz wierzchołki równomiernie rozmieszczone na okręgu.")
     preset = st.selectbox("Wybierz preset", list(PRESETS), key="z1_visual_preset")
-    if st.button("Pokaż graf", key="z1_visual_show"): st.session_state["z1_visual_graph"] = PRESETS[preset]
+    if st.button("Pokaż graf", key="z1_visual_show"):
+        st.session_state["z1_visual_graph"] = PRESETS[preset]
     g = st.session_state.get("z1_visual_graph", DEFAULT_GRAPH)
     st.code(adj_to_text(g))
     st.pyplot(render_graph(g, "Wizualizacja na okręgu"), use_container_width=False)
@@ -217,7 +219,8 @@ def z1_task3():
     if model == "G(n, l)":
         max_l = n * (n - 1) // 2
         l = st.number_input("Liczba krawędzi l", 0, max_l, min(10, max_l), key="z1_l")
-    else: p = st.slider("Prawdopodobieństwo p", 0.0, 1.0, .4, .01, key="z1_p")
+    else:
+        p = st.slider("Prawdopodobieństwo p", 0.0, 1.0, .4, .01, key="z1_p")
     seed = st.number_input("Seed", 0, 100000, 0, key="z1_seed")
     if st.button("Generuj", key="z1_generate"):
         st.session_state["z1_random_graph"] = gnl(n, l, seed) if model == "G(n, l)" else gnp(n, p, seed)
@@ -231,7 +234,7 @@ def z1_task3():
 def render_set1(task):
     [z1_task1, z1_task2, z1_task3][task - 1]()
 
-# Zestaw 2: sześć zadań
+# Zestaw 2
 
 def z2_task1():
     st.markdown("### 1. Sprawdzanie ciągu graficznego i budowa grafu")
@@ -246,22 +249,64 @@ def z2_task1():
             st.write("Stopnie zbudowanego grafu:", [len(g[v]) for v in sorted(g)])
             st.code(adj_to_text(g))
             st.pyplot(render_graph(g, "Graf z zadanego ciągu"), use_container_width=False)
-    except ValueError as exc: st.error(f"Podaj nieujemne liczby całkowite: {exc}")
+    except ValueError as exc:
+        st.error(f"Podaj nieujemne liczby całkowite: {exc}")
 
 
 def z2_task2():
     st.markdown("### 2. Randomizacja grafu o zadanych stopniach")
-    st.write("Wykonuj zamiany ab, cd → ad, bc, zachowując stopnie wierzchołków.")
-    default = build_graph([4, 2, 2, 3, 2, 1, 4, 2, 2, 2, 2])
-    g = graph_editor("Graf wejściowy", "z2_random_input", default)
-    swaps = st.number_input("Liczba zamian", 1, 500, 50, key="z2_swaps")
-    seed = st.number_input("Seed", 0, 100000, 0, key="z2_random_seed")
-    if st.button("Randomizuj", key="z2_randomize"): st.session_state["z2_random_result"] = randomize(g, swaps, seed)
-    result = st.session_state.get("z2_random_result", g)
-    st.write("Stopnie przed:", [len(g[v]) for v in sorted(g)])
-    st.write("Stopnie po:", [len(result[v]) for v in sorted(result)])
-    st.code(adj_to_text(result))
-    st.pyplot(render_graph(result, "Graf po randomizacji"), use_container_width=False)
+    st.write("Podaj ciąg stopni wierzchołków. Program zbuduje graf prosty o tych stopniach, a następnie wykona losowe zamiany krawędzi ab, cd → ad, bc. Stopnie pozostaną niezmienione.")
+    sequence_text = st.text_input(
+        "Ciąg stopni wierzchołków (liczby oddziel spacjami)",
+        value="3 3 2 2 2 2",
+        key="z2_random_degree_sequence",
+        help="Przykład: 3 3 2 2 2 2. Podany ciąg musi być graficzny.",
+    )
+    swaps = st.number_input("Liczba prób zamiany krawędzi", min_value=1, max_value=5000, value=50, key="z2_swaps")
+    seed = st.number_input("Seed (to samo ziarno daje ten sam wynik)", min_value=0, max_value=100000, value=0, key="z2_random_seed")
+
+    try:
+        degrees = [int(value) for value in sequence_text.split()]
+        if not degrees:
+            raise ValueError("Wpisz co najmniej jeden stopień.")
+        if any(degree < 0 for degree in degrees):
+            raise ValueError("Stopnie nie mogą być ujemne.")
+        if not is_graphic(degrees):
+            st.error("Podany ciąg nie jest graficzny. Zmień stopnie tak, aby można było zbudować graf prosty.")
+            return
+
+        original = build_graph(degrees)
+        degree_key = tuple(degrees)
+        state_key = "z2_random_result"
+        if st.session_state.get("z2_random_result_degrees") != degree_key:
+            st.session_state[state_key] = original
+            st.session_state["z2_random_result_degrees"] = degree_key
+
+        if st.button("Zbuduj i randomizuj graf", key="z2_randomize"):
+            st.session_state[state_key] = randomize(original, int(swaps), seed=int(seed))
+            st.session_state["z2_random_result_degrees"] = degree_key
+
+        result = st.session_state[state_key]
+        original_degrees = [len(original[v]) for v in sorted(original)]
+        result_degrees = [len(result[v]) for v in sorted(result)]
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Graf skonstruowany z ciągu")
+            st.caption(f"Stopnie: {original_degrees} · Krawędzie: {len(__import__('grafy.common.graph', fromlist=['adj_to_edges']).adj_to_edges(original))}")
+            st.code(adj_to_text(original))
+            st.pyplot(render_graph(original, "Graf przed randomizacją"), use_container_width=False)
+        with col2:
+            st.subheader("Graf po randomizacji")
+            st.caption(f"Stopnie: {result_degrees} · Zamiany: maks. {int(swaps)} prób")
+            st.code(adj_to_text(result))
+            st.pyplot(render_graph(result, "Graf po randomizacji"), use_container_width=False)
+        if original_degrees != result_degrees:
+            st.error("Błąd: randomizacja zmieniła stopnie wierzchołków.")
+        else:
+            st.success("Stopnie wierzchołków są zachowane.")
+    except ValueError as exc:
+        st.error(f"Niepoprawny ciąg stopni: {exc}")
 
 
 def z2_task3():
@@ -271,9 +316,11 @@ def z2_task3():
     g = graph_editor("Graf wejściowy", "z2_components_input", default)
     comp = components(g)
     groups: dict[int, list[int]] = {}
-    for vertex, label in comp.items(): groups.setdefault(label, []).append(vertex)
+    for vertex, label in comp.items():
+        groups.setdefault(label, []).append(vertex)
     st.subheader("Składowe spójności")
-    for number, vertices in groups.items(): st.write(f"Składowa {number}: {vertices} (rozmiar {len(vertices)})")
+    for number, vertices in groups.items():
+        st.write(f"Składowa {number}: {vertices} (rozmiar {len(vertices)})")
     biggest = largest_component(g)
     st.success(f"Największa składowa: {biggest} — {len(biggest)} wierzchołków")
     st.pyplot(render_graph(g, "Graf wejściowy"), use_container_width=False)
@@ -288,7 +335,8 @@ def z2_task4():
     st.write("Wygeneruj spójny graf o parzystych stopniach i znajdź cykl przechodzący przez każdą krawędź dokładnie raz.")
     n = st.number_input("Liczba wierzchołków", 3, 12, 8, key="z2_euler_n")
     seed = st.number_input("Seed", 0, 100000, 0, key="z2_euler_seed")
-    if st.button("Generuj graf i cykl", key="z2_euler_generate"): st.session_state["z2_euler_graph"] = random_eulerian_graph(n, seed)
+    if st.button("Generuj graf i cykl", key="z2_euler_generate"):
+        st.session_state["z2_euler_graph"] = random_eulerian_graph(n, seed)
     g = st.session_state.get("z2_euler_graph", random_eulerian_graph(8, 0))
     cycle = euler_cycle(g)
     st.write("Stopnie:", [len(g[v]) for v in sorted(g)])
@@ -304,9 +352,12 @@ def z2_task5():
     k = st.number_input("Stopień k", 0, 19, 2, key="z2_regular_k")
     seed = st.number_input("Seed", 0, 100000, 0, key="z2_regular_seed")
     if st.button("Generuj graf k-regularny", key="z2_regular_generate"):
-        try: st.session_state["z2_regular_graph"] = random_k_regular(n, k, seed)
-        except ValueError as exc: st.error(str(exc))
-    if "z2_regular_graph" not in st.session_state: st.session_state["z2_regular_graph"] = random_k_regular(8, 2, 0)
+        try:
+            st.session_state["z2_regular_graph"] = random_k_regular(n, k, seed)
+        except ValueError as exc:
+            st.error(str(exc))
+    if "z2_regular_graph" not in st.session_state:
+        st.session_state["z2_regular_graph"] = random_k_regular(8, 2, 0)
     g = st.session_state["z2_regular_graph"]
     st.write("Stopnie:", [len(g[v]) for v in sorted(g)])
     st.code(adj_to_text(g))
@@ -332,7 +383,7 @@ def z2_task6():
 def render_set2(task):
     {1: z2_task1, 2: z2_task2, 3: z2_task3, 4: z2_task4, 5: z2_task5, 6: z2_task6}[task]()
 
-# Zestaw 3: pięć zadań
+# Zestaw 3
 
 def ensure_weighted_graph():
     if "z3_edges" not in st.session_state:
@@ -426,9 +477,12 @@ def main():
     label = st.radio("Wybierz zadanie", tasks, key=f"task_{selected_set}")
     task = tasks.index(label) + 1
     st.markdown(f"## {selected_set} · Zadanie {task}")
-    if selected_set == "Zestaw 1": render_set1(task)
-    elif selected_set == "Zestaw 2": render_set2(task)
-    else: render_set3(task)
+    if selected_set == "Zestaw 1":
+        render_set1(task)
+    elif selected_set == "Zestaw 2":
+        render_set2(task)
+    else:
+        render_set3(task)
 
 
 if __name__ == "__main__":
