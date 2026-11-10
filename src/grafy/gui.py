@@ -6,12 +6,7 @@ import streamlit as st
 from grafy.common.graph import edges_to_adj
 from grafy.common.types import AdjList, Matrix
 from grafy.zestaw1.random_graphs import gnl, gnp
-from grafy.zestaw1.representations import (
-    incidence_to_list,
-    list_to_incidence,
-    list_to_matrix,
-    matrix_to_list,
-)
+from grafy.zestaw1.representations import incidence_to_list, list_to_incidence, list_to_matrix, matrix_to_list
 from grafy.zestaw1.visualization import circle_layout
 from grafy.zestaw2.components import components, largest_component
 from grafy.zestaw2.degree_sequence import build_graph, is_graphic
@@ -26,95 +21,81 @@ from grafy.zestaw3.mst import minimum_spanning_tree
 from grafy.zestaw3.weighted_graph import random_connected_weighted_graph
 
 
-# -------------------------------
-# Helpers shared across all sets
-# -------------------------------
 def normalize_graph(adj: AdjList | None) -> AdjList:
     if not adj:
         return {}
-
-    vertices = set(int(v) for v in adj)
+    vertices = {int(v) for v in adj}
     for neighbors in adj.values():
-        vertices |= {int(u) for u in neighbors}
-
-    if not vertices:
-        return {}
-
-    n = max(vertices)
+        vertices.update(int(u) for u in neighbors)
+    n = max(vertices, default=0)
     graph = {v: set() for v in range(1, n + 1)}
-
     for v, neighbors in adj.items():
-        v_int = int(v)
-        if v_int not in graph:
-            graph[v_int] = set()
-        graph[v_int].update(int(u) for u in neighbors if int(u) != v_int)
-
+        v = int(v)
+        graph[v].update(int(u) for u in neighbors if int(u) != v)
     for v in range(1, n + 1):
         for u in list(graph[v]):
-            graph.setdefault(int(u), set())
-            graph[int(u)].add(v)
-
-    return {v: sorted(graph.get(v, set())) for v in range(1, n + 1)}
+            graph[u].add(v)
+    return {v: sorted(graph[v]) for v in range(1, n + 1)}
 
 
 def adj_to_text(adj: AdjList) -> str:
-    adj = normalize_graph(adj)
-    if not adj:
-        return ""
-    return "\n".join(
-        f"{v}: {', '.join(map(str, adj.get(v, []))) if adj.get(v) else '-'}"
-        for v in sorted(adj)
-    )
+    graph = normalize_graph(adj)
+    return "\n".join(f"{v}: {', '.join(map(str, graph[v])) if graph[v] else '-'}" for v in graph)
 
 
-def matrix_to_text(m: Matrix) -> str:
-    return "\n".join(" ".join(str(x) for x in row) for row in m)
+def matrix_to_text(matrix: Matrix) -> str:
+    return "\n".join(" ".join(map(str, row)) for row in matrix)
 
 
 def parse_adj_list_text(raw: str) -> AdjList:
+    """Strictly parse an undirected simple graph adjacency list (one-based vertices)."""
     graph: dict[int, list[int]] = {}
-    for line in raw.splitlines():
+    for line_no, line in enumerate(raw.splitlines(), start=1):
         line = line.strip()
         if not line:
             continue
         if ":" not in line:
-            raise ValueError(f"Niewłaściwy format listy sąsiedztwa: '{line}'")
-        left, right = [part.strip() for part in line.split(":", 1)]
-        v = int(left)
-        neighbors = [int(x) for x in re.split(r"[\s,]+", right) if x]
-        graph[v] = neighbors
+            raise ValueError(f"Wiersz {line_no}: użyj formatu 'wierzchołek: sąsiedzi'.")
+        left, right = line.split(":", 1)
+        try:
+            vertex = int(left.strip())
+        except ValueError as exc:
+            raise ValueError(f"Wiersz {line_no}: numer wierzchołka przed ':' musi być liczbą.") from exc
+        if vertex < 1:
+            raise ValueError("Numery wierzchołków muszą być dodatnie.")
+        if vertex in graph:
+            raise ValueError(f"Wierzchołek {vertex} występuje w liście więcej niż raz.")
+        tokens = [x for x in re.split(r"[\s,]+", right.strip()) if x and x != "-"]
+        try:
+            neighbors = [int(x) for x in tokens]
+        except ValueError as exc:
+            raise ValueError(f"Wiersz {line_no}: sąsiedzi muszą być liczbami.") from exc
+        if len(neighbors) != len(set(neighbors)):
+            raise ValueError(f"Wierzchołek {vertex}: powtórzony sąsiad.")
+        if vertex in neighbors:
+            raise ValueError(f"Pętla przy wierzchołku {vertex} nie jest dozwolona.")
+        graph[vertex] = neighbors
 
     if not graph:
         raise ValueError("Lista sąsiedztwa jest pusta.")
-
-    vertices = set(graph)
-    for neighbors in graph.values():
-        vertices |= {int(u) for u in neighbors}
-
-    normalized = {v: [] for v in sorted(vertices)}
-    for v, neighbors in graph.items():
-        normalized[v] = sorted(set(neighbors))
-    return normalize_graph(normalized)
+    n = max(graph)
+    if set(graph) != set(range(1, n + 1)):
+        raise ValueError("Wierzchołki muszą być ponumerowane kolejno od 1 (bez brakujących numerów).")
+    for u, neighbors in graph.items():
+        for v in neighbors:
+            if v not in graph:
+                raise ValueError(f"Sąsiad {v} nie ma własnego wiersza w liście.")
+            if u not in graph[v]:
+                raise ValueError(f"Lista nie jest symetryczna: {u} ma sąsiada {v}, ale {v} nie ma sąsiada {u}.")
+    return {v: sorted(graph[v]) for v in range(1, n + 1)}
 
 
 def parse_matrix_text(raw: str) -> Matrix:
-    rows = []
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        row = [int(x) for x in re.split(r"[\s,]+", line) if x]
-        rows.append(row)
-    if not rows:
-        raise ValueError("Macierz jest pusta.")
-    n = len(rows)
-    if any(len(row) != n for row in rows):
-        raise ValueError("Macierz musi być kwadratowa.")
+    rows = [[int(x) for x in re.split(r"[\s,]+", line.strip()) if x]
+            for line in raw.splitlines() if line.strip()]
+    if not rows or any(len(row) != len(rows) for row in rows):
+        raise ValueError("Macierz musi być niepusta i kwadratowa.")
     return rows
-
-
-def parse_incidence_text(raw: str) -> Matrix:
-    return parse_matrix_text(raw)
 
 
 def graph_from_representation(kind: str, raw: str) -> AdjList:
@@ -122,575 +103,366 @@ def graph_from_representation(kind: str, raw: str) -> AdjList:
         return parse_adj_list_text(raw)
     if kind == "macierz sąsiedztwa":
         matrix = parse_matrix_text(raw)
-        return normalize_graph(matrix_to_list(matrix))
+        if any(x not in (0, 1) for row in matrix for x in row):
+            raise ValueError("Macierz sąsiedztwa grafu prostego zawiera tylko 0 i 1.")
+        if any(matrix[i][i] for i in range(len(matrix))) or any(matrix[i][j] != matrix[j][i] for i in range(len(matrix)) for j in range(len(matrix))):
+            raise ValueError("Macierz musi być symetryczna i mieć zera na przekątnej.")
+        return matrix_to_list(matrix)
     if kind == "macierz incydencji":
-        matrix = parse_incidence_text(raw)
-        return normalize_graph(incidence_to_list(matrix))
-    raise ValueError("Nieznana reprezentacja")
-
-
-def graph_to_list_text(graph: AdjList) -> str:
-    return adj_to_text(normalize_graph(graph))
+        matrix = parse_matrix_text(raw)
+        if any(sum(col) != 2 for col in zip(*matrix)):
+            raise ValueError("Każda kolumna macierzy incydencji musi zawierać dokładnie dwie jedynki.")
+        return incidence_to_list(matrix)
+    raise ValueError("Nieznana reprezentacja.")
 
 
 def graph_to_matrix_text(graph: AdjList) -> str:
     graph = normalize_graph(graph)
-    if not graph:
-        return ""
-    max_vertex = max(graph)
-    matrix = list_to_matrix({v: graph.get(v, []) for v in range(1, max_vertex + 1)})
-    return matrix_to_text(matrix)
+    return matrix_to_text(list_to_matrix(graph)) if graph else ""
 
 
 def graph_to_incidence_text(graph: AdjList) -> str:
     graph = normalize_graph(graph)
+    return matrix_to_text(list_to_incidence(graph)) if graph else ""
+
+
+def render_graph(adj: AdjList, title: str = "Graf", edge_labels: dict | None = None, highlight_edges=None):
+    graph = normalize_graph(adj)
+    fig, ax = plt.subplots(figsize=(7, 6))
     if not graph:
-        return ""
-    max_vertex = max(graph)
-    matrix = list_to_incidence({v: graph.get(v, []) for v in range(1, max_vertex + 1)})
-    return matrix_to_text(matrix)
-
-
-def render_graph(graph: AdjList, title: str = "Graf"):
-    fig, ax = plt.subplots(figsize=(7, 7))
-    graph = normalize_graph(graph)
-
-    if not graph:
-        ax.text(0.5, 0.5, "Brak grafu", ha="center", va="center", fontsize=14)
+        ax.text(.5, .5, "Brak grafu", ha="center", va="center")
         ax.set_axis_off()
         return fig
-
-    n = max(graph)
-    layout = circle_layout(n)
-    pos = {i + 1: layout[i] for i in range(n)}
-
-    seen: set[tuple[int, int]] = set()
-    for u in sorted(graph):
-        for v in graph.get(u, []):
-            a, b = sorted((u, v))
-            if a == b:
-                continue
-            if (a, b) in seen or (b, a) in seen:
-                continue
-            seen.add((a, b))
-            x1, y1 = pos[a]
-            x2, y2 = pos[b]
-            ax.plot([x1, x2], [y1, y2], color="#2c7be5", linewidth=2)
-
-    for vertex, (x, y) in pos.items():
-        ax.text(
-            x,
-            y,
-            str(vertex),
-            ha="center",
-            va="center",
-            fontsize=11,
-            bbox={"boxstyle": "circle,pad=0.45", "fc": "#dfe8ff", "ec": "#2c7be5"},
-        )
-
+    pos_list = circle_layout(len(graph))
+    pos = {i + 1: pos_list[i] for i in range(len(graph))}
+    highlighted = {tuple(sorted(e)) for e in (highlight_edges or [])}
+    for u, neighbors in graph.items():
+        for v in neighbors:
+            if u < v:
+                key = (u, v)
+                color = "#e63946" if key in highlighted else "#2c7be5"
+                ax.plot([pos[u][0], pos[v][0]], [pos[u][1], pos[v][1]], color=color,
+                        linewidth=3 if key in highlighted else 1.8, zorder=1)
+                if edge_labels is not None:
+                    ax.text((pos[u][0] + pos[v][0]) / 2, (pos[u][1] + pos[v][1]) / 2,
+                            str(edge_labels.get(key, "")), ha="center", va="center",
+                            bbox={"fc": "white", "ec": "none", "alpha": .8})
+    for v, (x, y) in pos.items():
+        ax.text(x, y, str(v), ha="center", va="center", zorder=2,
+                bbox={"boxstyle": "circle,pad=.4", "fc": "#dfe8ff", "ec": "#2c7be5"})
     ax.set_aspect("equal")
-    ax.set_axis_off()
-    ax.set_title(title, pad=18)
+    ax.axis("off")
+    ax.set_title(title)
     return fig
 
 
-DEFAULT_GRAPH: AdjList = {
-    1: [2, 3],
-    2: [1, 3, 4],
-    3: [1, 2, 4, 5],
-    4: [2, 3, 5],
-    5: [3, 4],
-}
+def graph_editor(title: str, key: str, default_graph: AdjList) -> AdjList | None:
+    """Text editor and strict apply action for tasks whose input is an adjacency list."""
+    st.subheader(title)
+    text_key = f"{key}_text"
+    graph_key = f"{key}_graph"
+    if graph_key not in st.session_state:
+        st.session_state[graph_key] = {v: list(nb) for v, nb in default_graph.items()}
+    if text_key not in st.session_state:
+        st.session_state[text_key] = adj_to_text(st.session_state[graph_key])
+    st.caption("Edytuj listę sąsiedztwa. Każdy wiersz: `wierzchołek: sąsiedzi`; dla izolowanego wierzchołka wpisz `v: -`.")
+    st.text_area("Lista sąsiedztwa", key=text_key, height=190)
+    if st.button("Zastosuj graf", key=f"{key}_apply"):
+        try:
+            st.session_state[graph_key] = parse_adj_list_text(st.session_state[text_key])
+            st.success("Graf wejściowy zaktualizowany.")
+        except ValueError as exc:
+            st.error(f"Niepoprawny graf: {exc}")
+    return st.session_state[graph_key]
 
+
+DEFAULT_GRAPH: AdjList = {1: [2, 3], 2: [1, 3, 4], 3: [1, 2, 4, 5], 4: [2, 3, 5], 5: [3, 4]}
 PRESETS = {
-    "Preset 1: trójkąt i gałąź": DEFAULT_GRAPH,
-    "Preset 2: cykl z przekątnymi": {
-        1: [2, 5, 4],
-        2: [1, 3, 5],
-        3: [2, 4, 6],
-        4: [1, 3, 5, 6],
-        5: [1, 2, 4, 6],
-        6: [3, 4, 5],
-    },
-    "Preset 3: drzewo": {
-        1: [2, 3],
-        2: [1, 4, 5],
-        3: [1, 6],
-        4: [2],
-        5: [2],
-        6: [3],
-    },
-    "Preset 4: pełny graf K5": {
-        1: [2, 3, 4, 5],
-        2: [1, 3, 4, 5],
-        3: [1, 2, 4, 5],
-        4: [1, 2, 3, 5],
-        5: [1, 2, 3, 4],
-    },
+    "Trójkąt i gałąź": DEFAULT_GRAPH,
+    "Cykl z przekątnymi": {1: [2, 4, 5], 2: [1, 3, 5], 3: [2, 4, 6], 4: [1, 3, 5, 6], 5: [1, 2, 4, 6], 6: [3, 4, 5]},
+    "Drzewo": {1: [2, 3], 2: [1, 4, 5], 3: [1, 6], 4: [2], 5: [2], 6: [3]},
+    "Pełny graf K5": {1: [2, 3, 4, 5], 2: [1, 3, 4, 5], 3: [1, 2, 4, 5], 4: [1, 2, 3, 5], 5: [1, 2, 3, 4]},
 }
 
-
-def get_active_text(graph: AdjList, kind: str) -> str:
-    graph = normalize_graph(graph)
-    if kind == "lista sąsiedztwa":
-        return graph_to_list_text(graph)
-    if kind == "macierz sąsiedztwa":
-        return graph_to_matrix_text(graph)
-    if kind == "macierz incydencji":
-        return graph_to_incidence_text(graph)
-    return ""
-
-
-# -------------------------------
-# Zestaw 1 — 3 zadania
-# -------------------------------
-def task1_section() -> None:
-    st.markdown("### Zestaw 1 · Zadanie 1")
-    st.write(
-        "Napisz program kodujący graf prosty za pomocą macierzy sąsiedztwa, macierzy incydencji i listy sąsiedztwa. "
-        "Stwórz moduł do zmiany danego kodowania na pozostałe."
-    )
-
-    if "graph" not in st.session_state:
-        st.session_state.graph = PRESETS["Preset 1: trójkąt i gałąź"]
-
-    preset_name = st.selectbox("Preset grafu", list(PRESETS.keys()))
-    if st.button("Załaduj preset"):
-        st.session_state.graph = PRESETS[preset_name]
-
-    st.subheader("Edytuj reprezentację grafu")
-    source_kind = st.selectbox(
-        "Reprezentacja źródłowa",
-        ["lista sąsiedztwa", "macierz sąsiedztwa", "macierz incydencji"],
-        key="rep_source",
-    )
-    st.text_area(
-        "Wpisz dane grafu",
-        value=get_active_text(st.session_state.graph, source_kind),
-        key="rep_input",
-        height=220,
-    )
-
-    if st.button("Zaktualizuj graf z tej reprezentacji"):
+# ---------------- Zestaw 1 ----------------
+def z1_task1() -> None:
+    st.markdown("### 1. Kodowanie grafów i konwersja")
+    st.write("Koduj graf prosty listą sąsiedztwa, macierzą sąsiedztwa i macierzą incydencji; edytuj reprezentację i konwertuj ją na pozostałe.")
+    preset = st.selectbox("Preset grafu", list(PRESETS), key="z1_preset")
+    if "z1_graph" not in st.session_state:
+        st.session_state["z1_graph"] = DEFAULT_GRAPH
+    if st.button("Załaduj preset", key="z1_load"):
+        st.session_state["z1_graph"] = PRESETS[preset]
+        st.session_state.pop("z1_input", None)
+    kind = st.selectbox("Reprezentacja wejściowa", ["lista sąsiedztwa", "macierz sąsiedztwa", "macierz incydencji"], key="z1_kind")
+    text_key = "z1_input"
+    if text_key not in st.session_state:
+        g = st.session_state["z1_graph"]
+        st.session_state[text_key] = (adj_to_text(g) if kind == "lista sąsiedztwa" else
+                                     graph_to_matrix_text(g) if kind == "macierz sąsiedztwa" else graph_to_incidence_text(g))
+    st.text_area("Edytuj dane", key=text_key, height=180)
+    if st.button("Zaktualizuj graf", key="z1_apply"):
         try:
-            graph = graph_from_representation(source_kind, st.session_state.rep_input)
-            st.session_state.graph = normalize_graph(graph)
-            st.success("Graf został zaktualizowany.")
-        except Exception as exc:
-            st.error(f"Błąd parsowania: {exc}")
-
-    st.markdown("---")
-    st.subheader("Wizualizacja")
-    st.pyplot(render_graph(st.session_state.graph, title="Graf prosty"))
-
-    st.markdown("---")
-    tabs = st.tabs(["Lista sąsiedztwa", "Macierz sąsiedztwa", "Macierz incydencji"])
-    with tabs[0]:
-        st.code(graph_to_list_text(st.session_state.graph))
-    with tabs[1]:
-        st.code(graph_to_matrix_text(st.session_state.graph))
-    with tabs[2]:
-        st.code(graph_to_incidence_text(st.session_state.graph))
-
-    st.markdown("---")
-    st.subheader("Konwersja")
-    source = st.selectbox("Źródło", ["lista", "matrix", "incidence"], key="convert_source")
-    target = st.selectbox("Cel", ["lista", "matrix", "incidence"], key="convert_target")
-
-    graph = normalize_graph(st.session_state.graph)
-    if source == "lista":
-        data = graph
-    elif source == "matrix":
-        data = list_to_matrix({v: graph.get(v, []) for v in sorted(graph)})
-    else:
-        data = list_to_incidence({v: graph.get(v, []) for v in sorted(graph)})
-
-    if source == "lista" and target == "matrix":
-        converted = list_to_matrix(graph)
-    elif source == "lista" and target == "incidence":
-        converted = list_to_incidence(graph)
-    elif source == "matrix" and target == "lista":
-        converted = matrix_to_list(data)
-    elif source == "matrix" and target == "incidence":
-        converted = list_to_incidence(matrix_to_list(data))
-    elif source == "incidence" and target == "lista":
-        converted = incidence_to_list(data)
-    elif source == "incidence" and target == "matrix":
-        converted = list_to_matrix(incidence_to_list(data))
-    else:
-        converted = data
-
-    if target == "lista":
-        st.code(adj_to_text(converted))
-    elif target == "matrix":
-        st.code(matrix_to_text(converted))
-    else:
-        st.code(matrix_to_text(converted))
+            st.session_state["z1_graph"] = graph_from_representation(kind, st.session_state[text_key])
+            st.success("Graf zaktualizowany.")
+        except ValueError as exc:
+            st.error(str(exc))
+    g = st.session_state["z1_graph"]
+    st.pyplot(render_graph(g, "Graf prosty"))
+    tabs = st.tabs(["Lista", "Macierz sąsiedztwa", "Macierz incydencji"])
+    with tabs[0]: st.code(adj_to_text(g))
+    with tabs[1]: st.code(graph_to_matrix_text(g))
+    with tabs[2]: st.code(graph_to_incidence_text(g))
 
 
-def task2_visualization_section() -> None:
-    st.markdown("### Zestaw 1 · Zadanie 2")
-    st.write("Program do wizualizacji grafów prostych z wierzchołkami równomiernie rozmieszczonymi na okręgu.")
-
-    preset_name = st.selectbox("Wybierz preset", list(PRESETS.keys()), key="circle_preset")
-    if st.button("Załaduj preset do wizualizacji"):
-        st.session_state["circle_graph"] = PRESETS[preset_name]
-    if "circle_graph" not in st.session_state:
-        st.session_state["circle_graph"] = DEFAULT_GRAPH
-
-    st.pyplot(render_graph(st.session_state["circle_graph"], title="Wizualizacja na okręgu"))
-
-
-def task3_random_graph_section() -> None:
-    st.markdown("### Zestaw 1 · Zadanie 3")
-    st.write("Tutaj można wygenerować losowe grafy z parametrami n, l lub n, p i zobaczyć ich reprezentacje.")
-
-    model = st.radio("Model grafu", ["G(n, l)", "G(n, p)"], horizontal=True)
-    n = st.number_input("n", min_value=1, max_value=30, value=8, step=1)
-
-    if model == "G(n, l)":
-        max_edges = n * (n - 1) // 2
-        l = st.number_input("l", min_value=0, max_value=max_edges, value=min(10, max_edges), step=1)
-        p = None
-    else:
-        l = None
-        p = st.slider("p", min_value=0.0, max_value=1.0, value=0.4, step=0.01)
-
-    seed = st.number_input("seed", min_value=0, max_value=100000, value=0, step=1)
-
-    if st.button("Wygeneruj graf"):
-        try:
-            if model == "G(n, l)":
-                g = gnl(n, l, seed=seed)
-            else:
-                g = gnp(n, float(p), seed=seed)
-            st.session_state["random_graph"] = normalize_graph(g)
-            st.success("Graf został wygenerowany.")
-        except Exception as exc:
-            st.error(f"Błąd generowania: {exc}")
-
-    if "random_graph" not in st.session_state:
-        st.session_state["random_graph"] = normalize_graph(gnl(8, 10, seed=0))
-
-    graph = st.session_state["random_graph"]
-    st.subheader("Lista sąsiedztwa")
+def z1_task2() -> None:
+    st.markdown("### 2. Wizualizacja grafu na okręgu")
+    st.write("Wybierz graf i zobacz jego wizualizację z wierzchołkami rozmieszczonymi równomiernie na okręgu.")
+    preset = st.selectbox("Wybierz preset", list(PRESETS), key="z1_visual_preset")
+    if st.button("Pokaż graf", key="z1_visual_show"):
+        st.session_state["z1_visual_graph"] = PRESETS[preset]
+    graph = st.session_state.get("z1_visual_graph", DEFAULT_GRAPH)
     st.code(adj_to_text(graph))
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Macierz sąsiedztwa")
-        st.code(graph_to_matrix_text(graph))
-    with col2:
-        st.subheader("Macierz incydencji")
-        st.code(graph_to_incidence_text(graph))
-
-    st.subheader("Wizualizacja")
-    st.pyplot(render_graph(graph, title="Graf losowy"))
+    st.pyplot(render_graph(graph, "Wizualizacja na okręgu"))
 
 
-def render_set1() -> None:
-    st.markdown("## Zestaw 1")
-    st.caption("Grafy i ich zastosowania")
+def z1_task3() -> None:
+    st.markdown("### 3. Generowanie grafów losowych G(n, l) i G(n, p)")
+    st.write("Generuj graf o n wierzchołkach z dokładnie l krawędziami albo z prawdopodobieństwem p dla każdej krawędzi.")
+    model = st.radio("Model", ["G(n, l)", "G(n, p)"], horizontal=True, key="z1_model")
+    n = st.number_input("Liczba wierzchołków n", min_value=1, max_value=30, value=8, key="z1_n")
+    if model == "G(n, l)":
+        max_l = n * (n - 1) // 2
+        l = st.number_input("Liczba krawędzi l", min_value=0, max_value=max_l, value=min(10, max_l), key="z1_l")
+    else:
+        p = st.slider("Prawdopodobieństwo p", 0.0, 1.0, 0.4, 0.01, key="z1_p")
+    seed = st.number_input("Seed", min_value=0, max_value=100000, value=0, key="z1_seed")
+    if st.button("Generuj", key="z1_generate"):
+        g = gnl(n, l, seed) if model == "G(n, l)" else gnp(n, p, seed)
+        st.session_state["z1_random_graph"] = g
+    g = st.session_state.get("z1_random_graph", gnl(8, 10, seed=0))
+    st.code(adj_to_text(g))
+    st.pyplot(render_graph(g, "Graf losowy"))
+    with st.expander("Reprezentacje"):
+        st.code("Macierz sąsiedztwa:\n" + graph_to_matrix_text(g) + "\n\nMacierz incydencji:\n" + graph_to_incidence_text(g))
 
-    task_map = {
-        1: task1_section,
-        2: task2_visualization_section,
-        3: task3_random_graph_section,
-    }
-    task_no = st.radio("Wybierz zadanie", list(task_map.keys()), horizontal=True)
-    task_map[task_no]()
 
+def render_set1(task: int) -> None:
+    [z1_task1, z1_task2, z1_task3][task - 1]()
 
-# -------------------------------
-# Zestaw 2 — 6 zadań
-# -------------------------------
+# ---------------- Zestaw 2 ----------------
 def z2_task1() -> None:
-    st.markdown("### Zestaw 2 · Zadanie 1")
-    st.write(
-        "Dla danej sekwencji liczb naturalnych sprawdź, czy jest ciągiem graficznym, a następnie zbuduj prosty graf o takich stopniach wierzchołków."
-    )
-    seq = st.text_input("Ciąg liczb (oddzielone spacjami)", value="4 2 2 3 2 1 4 2 2 2 2")
-
+    st.markdown("### 1. Sprawdzanie ciągu graficznego i budowa grafu")
+    st.write("Podaj stopnie wierzchołków. Program sprawdzi warunki graficzności i skonstruuje graf prosty metodą Havla–Hakimiego.")
+    raw = st.text_input("Ciąg stopni", "4 2 2 3 2 1 4 2 2 2 2", key="z2_seq")
     try:
-        values = [int(x) for x in seq.split() if x]
-        ok = is_graphic(values)
-        st.info(f"Czy ciąg jest graficzny? {'TAK' if ok else 'NIE'}")
-        if ok:
-            graph = build_graph(values)
-            st.code(adj_to_text(graph))
-            st.pyplot(render_graph(graph, title="Graf z ciągu graficznego"))
-    except Exception as exc:
-        st.error(f"Błąd: {exc}")
+        seq = [int(x) for x in raw.split()]
+        st.info("Ciąg jest graficzny." if is_graphic(seq) else "Ciąg nie jest graficzny.")
+        if is_graphic(seq):
+            g = build_graph(seq)
+            st.write("Stopnie zbudowanego grafu:", [len(g[v]) for v in sorted(g)])
+            st.code(adj_to_text(g))
+            st.pyplot(render_graph(g, "Graf z zadanego ciągu"))
+    except ValueError as exc:
+        st.error(f"Podaj nieujemne liczby całkowite: {exc}")
 
 
 def z2_task2() -> None:
-    st.markdown("### Zestaw 2 · Zadanie 2")
-    st.write(
-        "Powtarzaj operację zamiany par krawędzi ab i cd na ad i bc, zachowując stopnie wierzchołków."
-    )
-    if "z2_rand_graph" not in st.session_state:
-        st.session_state["z2_rand_graph"] = build_graph([4, 2, 2, 3, 2, 1, 4, 2, 2, 2, 2])
-
-    graph = st.session_state["z2_rand_graph"]
-    swaps = st.number_input("Liczba swapów", min_value=1, max_value=500, value=50)
-    seed = st.number_input("Seed", min_value=0, max_value=10000, value=0)
-
-    if st.button("Wykonaj randomizację"):
-        st.session_state["z2_rand_graph"] = randomize(graph, swaps, seed=seed)
-
-    st.code(adj_to_text(st.session_state["z2_rand_graph"]))
-    st.pyplot(render_graph(st.session_state["z2_rand_graph"], title="Graf po randomizacji"))
+    st.markdown("### 2. Randomizacja grafu o zadanych stopniach")
+    st.write("Wybierz graf, a następnie wykonaj próby zamiany krawędzi ab, cd na ad, bc. Stopnie pozostają zachowane.")
+    default = build_graph([4, 2, 2, 3, 2, 1, 4, 2, 2, 2, 2])
+    g = graph_editor("Graf wejściowy", "z2_random_input", default)
+    swaps = st.number_input("Liczba zaakceptowanych zamian", 1, 500, 50, key="z2_swaps")
+    seed = st.number_input("Seed", 0, 100000, 0, key="z2_random_seed")
+    if st.button("Randomizuj", key="z2_randomize"):
+        st.session_state["z2_random_result"] = randomize(g, swaps, seed)
+    result = st.session_state.get("z2_random_result", g)
+    st.write("Stopnie przed:", [len(g[v]) for v in sorted(g)])
+    st.write("Stopnie po:", [len(result[v]) for v in sorted(result)])
+    st.code(adj_to_text(result))
+    st.pyplot(render_graph(result, "Graf po randomizacji"))
 
 
 def z2_task3() -> None:
-    st.markdown("### Zestaw 2 · Zadanie 3")
-    st.write("Znajdź największą spójną składową grafu prostego.")
-    base = {
-        1: [2],
-        2: [1],
-        3: [4, 5],
-        4: [3],
-        5: [3],
-        6: [],
-    }
-    comp = components(base)
-    st.code("Składowe:\n" + str(comp))
-    st.info(f"Największa składowa: {largest_component(base)}")
-    st.pyplot(render_graph(base, title="Graf do sprawdzania komponentów"))
+    st.markdown("### 3. Największa spójna składowa")
+    st.write("Wprowadź graf prosty jako listę sąsiedztwa. Program wypisze wszystkie składowe, ich rozmiary i wyświetli największą.")
+    default = {1: [2], 2: [1], 3: [4, 5], 4: [3], 5: [3], 6: []}
+    graph = graph_editor("Graf wejściowy", "z2_components_input", default)
+    comp = components(graph)
+    groups: dict[int, list[int]] = {}
+    for vertex, component in comp.items():
+        groups.setdefault(component, []).append(vertex)
+    st.subheader("Składowe spójności")
+    for number, vertices in groups.items():
+        st.write(f"Składowa {number}: " + ", ".join(map(str, vertices)) + f" (rozmiar {len(vertices)})")
+    biggest = largest_component(graph)
+    st.success(f"Największa składowa: {{{', '.join(map(str, biggest))}}} — {len(biggest)} wierzchołków")
+    st.pyplot(render_graph(graph, "Graf wejściowy — największa składowa na czerwono", highlight_edges=[(u, v) for u in biggest for v in graph[u] if u < v]))
+    subgraph = {u: [v for v in graph[u] if v in biggest] for u in biggest}
+    st.subheader("Podgraf największej składowej")
+    st.code(adj_to_text(subgraph))
+    st.pyplot(render_graph(subgraph, "Największa spójna składowa"))
 
 
 def z2_task4() -> None:
-    st.markdown("### Zestaw 2 · Zadanie 4")
-    st.write("Wygeneruj losowy graf eulerowski i znajdź cykl Eulera.")
-    n = st.number_input("n", min_value=3, max_value=12, value=8)
-    seed = st.number_input("seed", min_value=0, max_value=10000, value=0)
-
-    if st.button("Wygeneruj graf Eulera"):
+    st.markdown("### 4. Losowy graf eulerowski i cykl Eulera")
+    st.write("Wygeneruj spójny graf o parzystych stopniach i znajdź cykl przechodzący przez każdą krawędź dokładnie raz.")
+    n = st.number_input("Liczba wierzchołków", 3, 12, 8, key="z2_euler_n")
+    seed = st.number_input("Seed", 0, 100000, 0, key="z2_euler_seed")
+    if st.button("Generuj graf i cykl", key="z2_euler_generate"):
         st.session_state["z2_euler_graph"] = random_eulerian_graph(n, seed)
-
-    if "z2_euler_graph" not in st.session_state:
-        st.session_state["z2_euler_graph"] = random_eulerian_graph(8, 0)
-
-    graph = st.session_state["z2_euler_graph"]
-    st.code(adj_to_text(graph))
-    try:
-        cyc = euler_cycle(graph)
-        st.success(f"Cykl Eulera: {cyc}")
-    except Exception as exc:
-        st.error(f"Błąd: {exc}")
-    st.pyplot(render_graph(graph, title="Graf Eulera"))
+    g = st.session_state.get("z2_euler_graph", random_eulerian_graph(8, 0))
+    cycle = euler_cycle(g)
+    st.write("Stopnie:", [len(g[v]) for v in sorted(g)])
+    st.success("Cykl Eulera: " + " → ".join(map(str, cycle)))
+    st.code(adj_to_text(g))
+    st.pyplot(render_graph(g, "Graf eulerowski", highlight_edges=list(zip(cycle, cycle[1:]))))
 
 
 def z2_task5() -> None:
-    st.markdown("### Zestaw 2 · Zadanie 5")
-    st.write("Wygeneruj graf, w którym każdy wierzchołek ma dokładnie k sąsiadów.")
-    n = st.number_input("Liczba wierzchołków n", min_value=2, max_value=20, value=8)
-    k = st.number_input("Stopień k", min_value=0, max_value=10, value=2)
-    seed = st.number_input("seed", min_value=0, max_value=10000, value=0)
-
-    if st.button("Wygeneruj graf k-regularny"):
+    st.markdown("### 5. Generowanie grafu k-regularnego")
+    st.write("Wygeneruj prosty graf, w którym każdy wierzchołek ma stopień k. Warunki: k < n oraz n·k jest parzyste.")
+    n = st.number_input("Liczba wierzchołków n", 2, 20, 8, key="z2_regular_n")
+    k = st.number_input("Stopień k", 0, 19, 2, key="z2_regular_k")
+    seed = st.number_input("Seed", 0, 100000, 0, key="z2_regular_seed")
+    if st.button("Generuj graf k-regularny", key="z2_regular_generate"):
         try:
-            st.session_state["z2_k_graph"] = random_k_regular(n, k, seed=seed)
-        except Exception as exc:
-            st.error(f"Błąd: {exc}")
-
-    if "z2_k_graph" not in st.session_state:
-        st.session_state["z2_k_graph"] = random_k_regular(8, 2, seed=0)
-
-    graph = st.session_state["z2_k_graph"]
-    st.code(adj_to_text(graph))
-    st.info(f"Stopnie: {[len(v) for v in graph.values()]}")
-    st.pyplot(render_graph(graph, title="Graf k-regularny"))
+            st.session_state["z2_regular_graph"] = random_k_regular(n, k, seed)
+        except ValueError as exc:
+            st.error(str(exc))
+    if "z2_regular_graph" not in st.session_state:
+        st.session_state["z2_regular_graph"] = random_k_regular(8, 2, 0)
+    g = st.session_state["z2_regular_graph"]
+    st.write("Stopnie:", [len(g[v]) for v in sorted(g)])
+    st.code(adj_to_text(g))
+    st.pyplot(render_graph(g, "Graf k-regularny"))
 
 
 def z2_task6() -> None:
-    st.markdown("### Zestaw 2 · Zadanie 6")
-    st.write("Sprawdź, czy mały graf jest hamiltonowski — znajdź cykl Hamiltona lub uzyskaj odpowiedź NIE.")
-
-    graph = {
-        1: [2, 3],
-        2: [1, 3],
-        3: [1, 2],
-    }
-    cyc = hamilton_cycle(graph)
+    st.markdown("### 6. Sprawdzanie Hamiltonowości")
+    st.write("Edytuj graf prosty. Program sprawdzi, czy istnieje cykl Hamiltona przechodzący przez każdy wierzchołek dokładnie raz.")
+    default = {1: [2, 3], 2: [1, 3, 4], 3: [1, 2, 4], 4: [2, 3]}
+    graph = graph_editor("Graf wejściowy", "z2_hamilton_input", default)
+    cycle = hamilton_cycle(graph)
+    if cycle:
+        st.success("Graf jest hamiltonowski. Cykl: " + " → ".join(map(str, cycle)))
+        st.pyplot(render_graph(graph, "Znaleziony cykl Hamiltona", highlight_edges=list(zip(cycle, cycle[1:]))))
+    else:
+        st.warning("Graf nie jest hamiltonowski — cyklu Hamiltona nie znaleziono.")
+        st.pyplot(render_graph(graph, "Graf wejściowy"))
+    st.subheader("Lista sąsiedztwa grafu")
     st.code(adj_to_text(graph))
-    st.info(f"Czy graf jest hamiltonowski? {'TAK' if cyc else 'NIE'}")
-    if cyc:
-        st.success(f"Cykl Hamiltona: {cyc}")
 
 
-def render_set2() -> None:
-    st.markdown("## Zestaw 2")
-    st.caption("Grafy i ich zastosowania")
-    task_map = {
-        1: z2_task1,
-        2: z2_task2,
-        3: z2_task3,
-        4: z2_task4,
-        5: z2_task5,
-        6: z2_task6,
-    }
-    task_no = st.radio("Wybierz zadanie", list(task_map.keys()), horizontal=True)
-    task_map[task_no]()
+def render_set2(task: int) -> None:
+    tasks = {1: z2_task1, 2: z2_task2, 3: z2_task3, 4: z2_task4, 5: z2_task5, 6: z2_task6}
+    tasks[task]()
 
-
-# -------------------------------
-# Zestaw 3 — 5 zadań
-# -------------------------------
-def z3_task1() -> None:
-    st.markdown("### Zestaw 3 · Zadanie 1")
-    st.write("Wygeneruj spójny graf losowy i przypisz każdej krawędzi losową wagę z przedziału 1..10.")
-    n = st.number_input("n", min_value=2, max_value=30, value=12)
-    p = st.slider("p", min_value=0.0, max_value=1.0, value=0.2, step=0.01)
-    seed = st.number_input("seed", min_value=0, max_value=10000, value=0)
-
-    if st.button("Generuj graf ważony"):
-        edges, matrix = random_connected_weighted_graph(n, p=p, seed=seed)
-        st.session_state["z3_edges"] = edges
-        st.session_state["z3_matrix"] = matrix
-        st.session_state["z3_adj"] = edges_to_adj(n, [(u, v) for u, v, _ in edges])
-
+# ---------------- Zestaw 3 ----------------
+def ensure_weighted_graph() -> tuple[list[tuple[int, int, int]], Matrix, AdjList]:
     if "z3_edges" not in st.session_state:
-        edges, matrix = random_connected_weighted_graph(12, p=0.2, seed=0)
+        edges, matrix = random_connected_weighted_graph(12, p=.2, seed=0)
         st.session_state["z3_edges"] = edges
         st.session_state["z3_matrix"] = matrix
         st.session_state["z3_adj"] = edges_to_adj(12, [(u, v) for u, v, _ in edges])
+    return st.session_state["z3_edges"], st.session_state["z3_matrix"], st.session_state["z3_adj"]
 
-    edges = st.session_state["z3_edges"]
-    matrix = st.session_state["z3_matrix"]
-    st.code("\n".join(f"{u} {v} {w}" for u, v, w in edges))
+
+def z3_task1() -> None:
+    st.markdown("### 1. Spójny graf losowy z wagami")
+    st.write("Generuj spójny graf losowy i przypisz każdej krawędzi naturalną wagę z zakresu 1–10.")
+    n = st.number_input("Liczba wierzchołków", 2, 30, 12, key="z3_n")
+    p = st.slider("Prawdopodobieństwo krawędzi p", 0.0, 1.0, .2, .01, key="z3_p")
+    seed = st.number_input("Seed", 0, 100000, 0, key="z3_seed")
+    if st.button("Wygeneruj", key="z3_generate"):
+        edges, matrix = random_connected_weighted_graph(n, p, seed=seed)
+        st.session_state["z3_edges"] = edges
+        st.session_state["z3_matrix"] = matrix
+        st.session_state["z3_adj"] = edges_to_adj(n, [(u, v) for u, v, _ in edges])
+    edges, matrix, graph = ensure_weighted_graph()
+    st.write(f"Liczba wierzchołków: {len(matrix)}, liczba krawędzi: {len(edges)}")
+    st.code("u  v  waga\n" + "\n".join(f"{u}  {v}  {w}" for u, v, w in edges))
+    st.subheader("Macierz wag (0 oznacza brak krawędzi)")
     st.code(matrix_to_text(matrix))
-    st.pyplot(render_graph(st.session_state["z3_adj"], title="Graf ważony"))
+    labels = {(u, v): weight for u, v, weight in edges}
+    st.pyplot(render_graph(graph, "Graf ważony", edge_labels=labels))
 
 
 def z3_task2() -> None:
-    st.markdown("### Zestaw 3 · Zadanie 2")
-    st.write("Znajdź najkrótsze ścieżki od zadanego wierzchołka do wszystkich pozostałych.")
-    if "z3_matrix" not in st.session_state:
-        st.session_state["z3_matrix"] = random_connected_weighted_graph(12, p=0.2, seed=0)[1]
-    w = st.session_state["z3_matrix"]
-    start = st.number_input("Wierzchołek startowy (1..n)", min_value=1, max_value=len(w), value=1)
-    ds, ps = dijkstra(w, start - 1)
-    st.code("Dystansy: " + str(ds))
-    for v in range(len(w)):
-        path = shortest_path(ps, start - 1, v)
-        st.code(f"d({start} -> {v + 1}) = {ds[v]}, ścieżka: {[x + 1 for x in path]}")
+    st.markdown("### 2. Najkrótsze ścieżki — algorytm Dijkstry")
+    st.write("Wybierz wierzchołek początkowy. Dla każdego wierzchołka zobaczysz długość najkrótszej ścieżki i jej przebieg.")
+    _, w, graph = ensure_weighted_graph()
+    start = st.number_input("Wierzchołek startowy", 1, len(w), 1, key="z3_dijkstra_start")
+    ds, parents = dijkstra(w, start - 1)
+    rows = []
+    for v, distance in enumerate(ds):
+        path = shortest_path(parents, start - 1, v)
+        rows.append({"Cel": v + 1, "Odległość": distance, "Najkrótsza ścieżka": " → ".join(str(x + 1) for x in path) if path else "brak"})
+    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.pyplot(render_graph(graph, f"Najkrótsze ścieżki od {start}"))
 
 
 def z3_task3() -> None:
-    st.markdown("### Zestaw 3 · Zadanie 3")
-    st.write("Wyznacz macierz odległości między wszystkimi parami wierzchołków.")
-    if "z3_matrix" not in st.session_state:
-        st.session_state["z3_matrix"] = random_connected_weighted_graph(12, p=0.2, seed=0)[1]
-    w = st.session_state["z3_matrix"]
-    d = distance_matrix(w)
-    st.code(matrix_to_text(d))
+    st.markdown("### 3. Macierz odległości")
+    st.write("Wyznacz najkrótszą odległość między każdą parą wierzchołków grafu ważonego.")
+    _, w, _ = ensure_weighted_graph()
+    distances = distance_matrix(w)
+    st.dataframe(distances, use_container_width=True, hide_index=True)
+    st.caption("Wiersz i kolumna odpowiadają numerom wierzchołków; wartości są sumami wag najkrótszych ścieżek.")
 
 
 def z3_task4() -> None:
-    st.markdown("### Zestaw 3 · Zadanie 4")
-    st.write("Znajdź centrum grafu i centrum minimax.")
-    if "z3_matrix" not in st.session_state:
-        st.session_state["z3_matrix"] = random_connected_weighted_graph(12, p=0.2, seed=0)[1]
-    w = st.session_state["z3_matrix"]
-    d = distance_matrix(w)
-    c, cs = center(d)
-    m, mf = minimax_center(d)
-    st.info(f"Centrum: {c} (suma odległości: {cs})")
-    st.info(f"Centrum minimax: {m} (odległość do najdalszego: {mf})")
-    st.code(matrix_to_text(d))
+    st.markdown("### 4. Centrum i centrum minimax")
+    st.write("Centrum minimalizuje sumę odległości do wszystkich pozostałych wierzchołków. Centrum minimax minimalizuje maksymalną odległość.")
+    _, w, _ = ensure_weighted_graph()
+    distances = distance_matrix(w)
+    c, total = center(distances)
+    m, radius = minimax_center(distances)
+    col1, col2 = st.columns(2)
+    col1.metric("Centrum", c, f"Suma odległości: {total}")
+    col2.metric("Centrum minimax", m, f"Maksymalna odległość: {radius}")
+    st.dataframe(distances, use_container_width=True, hide_index=True)
 
 
 def z3_task5() -> None:
-    st.markdown("### Zestaw 3 · Zadanie 5")
-    st.write("Zastosuj algorytm Kruskala i wyznacz minimalne drzewo rozpinające.")
-    if "z3_edges" not in st.session_state:
-        edges, _ = random_connected_weighted_graph(12, p=0.2, seed=0)
-        st.session_state["z3_edges"] = edges
-    edges = st.session_state["z3_edges"]
-    n = max(max(u, v) for u, v, _ in edges)
-    tree = minimum_spanning_tree(n, edges)
-    st.code("\n".join(f"{u} {v} {w}" for u, v, w in tree))
-    st.success(f"Suma wag MST: {sum(x for *_, x in tree)}")
+    st.markdown("### 5. Minimalne drzewo rozpinające")
+    st.write("Zastosuj algorytm Kruskala. Czerwone krawędzie na rysunku należą do minimalnego drzewa rozpinającego.")
+    edges, _, graph = ensure_weighted_graph()
+    tree = minimum_spanning_tree(len(graph), edges)
+    tree_edges = {(min(u, v), max(u, v)) for u, v, _ in tree}
+    st.code("u  v  waga\n" + "\n".join(f"{u}  {v}  {weight}" for u, v, weight in tree))
+    st.success(f"Liczba krawędzi: {len(tree)} · Suma wag: {sum(weight for _, _, weight in tree)}")
+    labels = {(u, v): weight for u, v, weight in edges}
+    st.pyplot(render_graph(graph, "Minimalne drzewo rozpinające", edge_labels=labels, highlight_edges=tree_edges))
 
 
-def render_set3() -> None:
-    st.markdown("## Zestaw 3")
-    st.caption("Grafy i ich zastosowania")
-    task_map = {
-        1: z3_task1,
-        2: z3_task2,
-        3: z3_task3,
-        4: z3_task4,
-        5: z3_task5,
-    }
-    task_no = st.radio("Wybierz zadanie", list(task_map.keys()), horizontal=True)
-    task_map[task_no]()
+def render_set3(task: int) -> None:
+    tasks = {1: z3_task1, 2: z3_task2, 3: z3_task3, 4: z3_task4, 5: z3_task5}
+    tasks[task]()
 
 
-# -------------------------------
-# Landing page with all sets and tasks
-# -------------------------------
-def landing_page() -> None:
-    st.markdown("# Grafy lab — wybór zestawu i zadania")
-    st.write("Kliknij konkretne zadanie, aby przejść do jego treści i kalkulatora.")
-
-    set_tasks = {
-        "Zestaw 1": [
-            (1, "Kodowanie grafów i konwersja"),
-            (2, "Wizualizacja grafów prostych na okręgu"),
-            (3, "Generowanie grafów losowych G(n, l) i G(n, p)"),
-        ],
-        "Zestaw 2": [
-            (1, "Ciąg graficzny i budowa grafu"),
-            (2, "Randomizacja grafu prostego"),
-            (3, "Największa spójna składowa"),
-            (4, "Graf eulerowski i cykl Eulera"),
-            (5, "Graf k-regularny"),
-            (6, "Hamiltonowość grafu"),
-        ],
-        "Zestaw 3": [
-            (1, "Losowy spójny graf z wagami"),
-            (2, "Algorytm Dijkstry"),
-            (3, "Macierz odległości"),
-            (4, "Centrum i centrum minimax"),
-            (5, "Minimalne drzewo rozpinające"),
-        ],
-    }
-
-    for title, tasks in set_tasks.items():
-        st.markdown(f"### {title}")
-        cols = st.columns(3)
-        for idx, (task_no, desc) in enumerate(tasks):
-            with cols[idx % 3]:
-                if st.button(f"Zadanie {task_no}\n{desc}", key=f"main_{title}_{task_no}"):
-                    st.session_state["selected_set"] = title
-                    st.session_state["selected_task"] = task_no
-
-    if "selected_set" in st.session_state and "selected_task" in st.session_state:
-        st.markdown("---")
-        st.markdown(f"## Wybrane: {st.session_state['selected_set']} · Zadanie {st.session_state['selected_task']}")
-
-        if st.session_state["selected_set"] == "Zestaw 1":
-            render_set1()
-        elif st.session_state["selected_set"] == "Zestaw 2":
-            render_set2()
-        else:
-            render_set3()
+SETS = {
+    "Zestaw 1": ["1. Kodowanie grafów i konwersja", "2. Wizualizacja na okręgu", "3. Generowanie grafów losowych G(n, l), G(n, p)"],
+    "Zestaw 2": ["1. Ciąg graficzny", "2. Randomizacja", "3. Największa spójna składowa", "4. Graf eulerowski i cykl Eulera", "5. Graf k-regularny", "6. Hamiltonowość"],
+    "Zestaw 3": ["1. Graf ważony", "2. Algorytm Dijkstry", "3. Macierz odległości", "4. Centrum i centrum minimax", "5. Minimalne drzewo rozpinające"],
+}
 
 
-# -------------------------------
-# Main app
-# -------------------------------
 def main() -> None:
     st.set_page_config(page_title="Grafy Lab", page_icon="📈", layout="wide")
-
-    if "selected_set" not in st.session_state:
-        st.session_state["selected_set"] = "Zestaw 1"
-    if "selected_task" not in st.session_state:
-        st.session_state["selected_task"] = 1
-
-    landing_page()
+    st.title("Grafy — zestawy i zadania")
+    st.write("Wybierz zestaw, a następnie zadanie. Wyniki, reprezentacje i wizualizacja pojawią się w widoku zadania.")
+    selected_set = st.radio("Wybierz zestaw", list(SETS), horizontal=True, key="selected_set")
+    tasks = SETS[selected_set]
+    selected_label = st.radio("Wybierz zadanie", tasks, key=f"task_{selected_set}")
+    task_no = tasks.index(selected_label) + 1
+    st.markdown(f"## {selected_set} · Zadanie {task_no}")
+    if selected_set == "Zestaw 1":
+        render_set1(task_no)
+    elif selected_set == "Zestaw 2":
+        render_set2(task_no)
+    else:
+        render_set3(task_no)
 
 
 if __name__ == "__main__":
