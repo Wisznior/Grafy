@@ -79,7 +79,6 @@ def parse_adj_list_text(raw: str) -> AdjList:
 
 
 def parse_matrix_text(raw: str, *, square: bool = True) -> Matrix:
-    """Wczytuje macierz prostokątną; macierz sąsiedztwa dodatkowo wymaga kwadratowej."""
     try:
         rows = [
             [int(x) for x in re.split(r"[\s,]+", line.strip()) if x]
@@ -183,13 +182,14 @@ def graph_editor(title: str, key: str, default_graph: AdjList) -> AdjList:
     return st.session_state[graph_key]
 
 
-# Presety zestawu 1 są wszystkie prostymi, symetrycznymi grafami bez pętli.
-DEFAULT_GRAPH: AdjList = {1: [2, 3], 2: [1, 3, 4], 3: [1, 2, 4, 5], 4: [2, 3, 5], 5: [3, 4]}
+# W Zestawie 1 dostępne są wyłącznie dwa presety kompletne i poprawne.
+def complete_graph(n: int) -> AdjList:
+    return {v: [u for u in range(1, n + 1) if u != v] for v in range(1, n + 1)}
+
+
 PRESETS: dict[str, AdjList] = {
-    "Trójkąt i gałąź": DEFAULT_GRAPH,
-    "Cykl z przekątnymi": {1: [2, 4, 5], 2: [1, 3, 5], 3: [2, 4, 6], 4: [1, 3, 5, 6], 5: [1, 2, 4, 6], 6: [3, 4, 5]},
-    "Drzewo": {1: [2, 3], 2: [1, 4, 5], 3: [1, 6], 4: [2], 5: [2], 6: [3]},
-    "Pełny graf K5": {1: [2, 3, 4, 5], 2: [1, 3, 4, 5], 3: [1, 2, 4, 5], 4: [1, 2, 3, 5], 5: [1, 2, 3, 4]},
+    "Pełny graf K5": complete_graph(5),
+    "Pełny graf K6": complete_graph(6),
 }
 
 
@@ -201,33 +201,33 @@ def preset_text(graph: AdjList, kind: str) -> str:
     return graph_to_incidence_text(graph)
 
 
+# ---------------- Zestaw 1 ----------------
 def z1_task1() -> None:
     st.markdown("### 1. Kodowanie grafów i konwersja")
     st.write("Koduj graf prosty listą sąsiedztwa, macierzą sąsiedztwa i macierzą incydencji; edytuj reprezentację i konwertuj ją na pozostałe.")
-    if "z1_graph" not in st.session_state:
-        st.session_state["z1_graph"] = DEFAULT_GRAPH
-    preset = st.selectbox("Preset grafu", list(PRESETS), key="z1_preset")
+    preset = st.selectbox("Preset grafu", list(PRESETS), key="z1_preset_k5_k6")
     kind = st.selectbox("Reprezentacja wejściowa", ["lista sąsiedztwa", "macierz sąsiedztwa", "macierz incydencji"], key="z1_kind")
+    graph_key = "z1_graph"
+    if graph_key not in st.session_state:
+        st.session_state[graph_key] = PRESETS[preset]
     text_key = f"z1_input_{kind}"
-    if st.button("Załaduj preset", key="z1_load"):
-        st.session_state["z1_graph"] = PRESETS[preset]
-        for representation in ("lista sąsiedztwa", "macierz sąsiedztwa", "macierz incydencji"):
-            st.session_state.pop(f"z1_input_{representation}", None)
+    if st.button("Załaduj preset", key="z1_load_k5_k6"):
+        st.session_state[graph_key] = PRESETS[preset]
+        for rep in ("lista sąsiedztwa", "macierz sąsiedztwa", "macierz incydencji"):
+            st.session_state[f"z1_input_{rep}"] = preset_text(PRESETS[preset], rep)
     if text_key not in st.session_state:
-        st.session_state[text_key] = preset_text(st.session_state["z1_graph"], kind)
+        st.session_state[text_key] = preset_text(st.session_state[graph_key], kind)
     st.text_area("Edytuj dane", key=text_key, height=150)
     if st.button("Zaktualizuj graf", key="z1_apply"):
         try:
-            graph = graph_from_representation(kind, st.session_state[text_key])
-            st.session_state["z1_graph"] = graph
-            # Pozostałe reprezentacje zostaną wygenerowane z nowego grafu po ich wybraniu.
-            for representation in ("lista sąsiedztwa", "macierz sąsiedztwa", "macierz incydencji"):
-                if representation != kind:
-                    st.session_state.pop(f"z1_input_{representation}", None)
+            st.session_state[graph_key] = graph_from_representation(kind, st.session_state[text_key])
+            for rep in ("lista sąsiedztwa", "macierz sąsiedztwa", "macierz incydencji"):
+                if rep != kind:
+                    st.session_state.pop(f"z1_input_{rep}", None)
             st.success("Graf zaktualizowany.")
         except ValueError as exc:
             st.error(f"Nie można wczytać reprezentacji: {exc}")
-    graph = st.session_state["z1_graph"]
+    graph = st.session_state[graph_key]
     st.pyplot(render_graph(graph, "Graf prosty"), use_container_width=False)
     tabs = st.tabs(["Lista sąsiedztwa", "Macierz sąsiedztwa", "Macierz incydencji"])
     with tabs[0]: st.code(adj_to_text(graph))
@@ -237,8 +237,8 @@ def z1_task1() -> None:
 
 def z1_task2() -> None:
     st.markdown("### 2. Wizualizacja grafu prostego na okręgu")
-    st.write("Wybierz jeden z przykładowych grafów. Wierzchołki zostaną rozmieszczone równomiernie na okręgu.")
-    preset = st.selectbox("Preset grafu", list(PRESETS), key="z1_visual_preset")
+    st.write("Wybierz pełny graf K5 albo K6. Wierzchołki zostaną rozmieszczone równomiernie na okręgu.")
+    preset = st.selectbox("Preset grafu", list(PRESETS), key="z1_visual_preset_k5_k6")
     graph = PRESETS[preset]
     st.code(adj_to_text(graph))
     st.pyplot(render_graph(graph, f"Wizualizacja: {preset}"), use_container_width=False)
@@ -272,8 +272,7 @@ def render_set1(task: int) -> None:
     {1: z1_task1, 2: z1_task2, 3: z1_task3}[task]()
 
 
-# Zestaw 2
-
+# ---------------- Zestaw 2 ----------------
 def z2_task1() -> None:
     st.markdown("### 1. Sprawdzanie ciągu graficznego i budowa grafu")
     st.write("Podaj stopnie wierzchołków. Program sprawdzi graficzność i skonstruuje graf metodą Havla–Hakimiego.")
@@ -330,16 +329,20 @@ def z2_task2() -> None:
 
 def z2_task3() -> None:
     st.markdown("### 3. Największa spójna składowa")
+    st.write("Edytuj listę sąsiedztwa. Program wypisze wszystkie składowe i wyświetli największą.")
     graph = graph_editor("Edytuj graf wejściowy", "z2_components_input", {1: [2], 2: [1], 3: [4, 5], 4: [3], 5: [3], 6: []})
     labels = components(graph)
     groups: dict[int, list[int]] = {}
-    for vertex, label in labels.items(): groups.setdefault(label, []).append(vertex)
+    for vertex, label in labels.items():
+        groups.setdefault(label, []).append(vertex)
     st.subheader("Składowe spójności")
-    for number, vertices in groups.items(): st.write(f"Składowa {number}: {vertices} (rozmiar {len(vertices)})")
+    for number, vertices in groups.items():
+        st.write(f"Składowa {number}: {vertices} (rozmiar {len(vertices)})")
     biggest = largest_component(graph)
     st.success(f"Największa składowa: {biggest} — {len(biggest)} wierzchołków")
+    st.info("Wierzchołek 6 w grafie przykładowym jest izolowany (jego składowa ma rozmiar 1), dlatego nie należy do największej składowej. Nadal jest widoczny na rysunku grafu wejściowego poniżej.")
+    st.pyplot(render_graph(graph, "Cały graf wejściowy"), use_container_width=False)
     subgraph = {u: [v for v in graph[u] if v in biggest] for u in biggest}
-    st.pyplot(render_graph(graph, "Graf wejściowy"), use_container_width=False)
     st.subheader("Podgraf największej składowej")
     st.code(adj_to_text(subgraph))
     st.pyplot(render_graph(subgraph, "Największa spójna składowa"), use_container_width=False)
@@ -367,9 +370,12 @@ def z2_task5() -> None:
     k = st.number_input("Stopień k", 0, 19, 2, key="z2_regular_k")
     seed = st.number_input("Seed", 0, 100000, 0, key="z2_regular_seed")
     if st.button("Generuj graf k-regularny", key="z2_regular_generate"):
-        try: st.session_state["z2_regular_graph"] = random_k_regular(n, k, seed)
-        except ValueError as exc: st.error(str(exc))
-    if "z2_regular_graph" not in st.session_state: st.session_state["z2_regular_graph"] = random_k_regular(8, 2, 0)
+        try:
+            st.session_state["z2_regular_graph"] = random_k_regular(n, k, seed)
+        except ValueError as exc:
+            st.error(str(exc))
+    if "z2_regular_graph" not in st.session_state:
+        st.session_state["z2_regular_graph"] = random_k_regular(8, 2, 0)
     graph = st.session_state["z2_regular_graph"]
     st.write("Stopnie:", [len(graph[v]) for v in sorted(graph)])
     st.code(adj_to_text(graph))
@@ -394,8 +400,7 @@ def render_set2(task: int) -> None:
     {1: z2_task1, 2: z2_task2, 3: z2_task3, 4: z2_task4, 5: z2_task5, 6: z2_task6}[task]()
 
 
-# Zestaw 3
-
+# ---------------- Zestaw 3 ----------------
 def ensure_weighted_graph():
     if "z3_edges" not in st.session_state:
         edges, matrix = random_connected_weighted_graph(12, p=.2, seed=0)
