@@ -5,14 +5,14 @@ from typing import Any
 Matrix = list[list[int]]
 AdjList = dict[int, list[int]]
 
-
+#macierz sasiedstwa -> lista sasiedstwa
 def matrix_to_list(m: Matrix) -> AdjList:
     if not m:
         return {}
     n = len(m)
     return {i + 1: [j + 1 for j in range(n) if m[i][j]] for i in range(n)}
 
-
+#lista sasiedztwa -> macierz sasiedstwa
 def list_to_matrix(adj: AdjList) -> Matrix:
     vertices = sorted(adj)
     n = max(vertices, default=0)
@@ -26,11 +26,11 @@ def list_to_matrix(adj: AdjList) -> Matrix:
             m[u - 1][v - 1] = 1
     return m
 
-
+#helper: lista sasiedztwa -> lista krawedzi
 def adj_to_edges(adj: AdjList) -> list[tuple[int, int]]:
     return sorted((u, v) for u, nb in adj.items() for v in nb if u < v)
 
-
+#helper: lista krawedzi -> lista sasiedztwa
 def edges_to_adj(n: int, edges) -> AdjList:
     adj = {v: [] for v in range(1, n + 1)}
     for u, v in edges:
@@ -40,7 +40,7 @@ def edges_to_adj(n: int, edges) -> AdjList:
         adj[v].append(u)
     return {v: sorted(nb) for v, nb in adj.items()}
 
-
+#lista sasiedztwa -> macierz incydencji
 def list_to_incidence(adj: AdjList) -> Matrix:
     edges = adj_to_edges(adj)
     if not edges:
@@ -51,7 +51,7 @@ def list_to_incidence(adj: AdjList) -> Matrix:
         inc[v - 1][k] = 1
     return inc
 
-
+#macierz incydencji -> lista sasiedstwa
 def incidence_to_list(inc: Matrix) -> AdjList:
     if not inc:
         return {}
@@ -65,11 +65,11 @@ def incidence_to_list(inc: Matrix) -> AdjList:
         edges.append((vertices[0], vertices[1]))
     return edges_to_adj(len(inc), edges)
 
-
+#macierz_sasiedstwa -> lista sasiedstwa -> macierz incydencji
 def matrix_to_incidence(m: Matrix) -> Matrix:
     return list_to_incidence(matrix_to_list(m))
 
-
+#macierz incydencji -> lista sasiedstwa -> maicerz sasiedstwa
 def incidence_to_matrix(inc: Matrix) -> Matrix:
     return list_to_matrix(incidence_to_list(inc))
 
@@ -79,7 +79,7 @@ _FROM_LIST = {"matrix": list_to_matrix, "list": lambda x: x, "incidence": list_t
 
 
 class Graph:
-    """Prosta warstwa pomocnicza do edycji grafu w trzech reprezentacjach."""
+    """Warstwa pomocnicza do edycji grafu w trzech reprezentacjach."""
 
     def __init__(self, n: int = 0, edges: list[tuple[int, int]] | None = None, adj: AdjList | None = None):
         self.n = n

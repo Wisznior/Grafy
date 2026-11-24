@@ -2,7 +2,7 @@ from grafy.common.types import AdjList
 
 
 def hamilton_cycle(adj: AdjList) -> list[int] | None:
-    """Brute force (DFS z nawrotami). Zwraca [1, ..., 1] albo None."""
+    """Brute force (DFS z nawrotami). Albo [1, ..., 1] albo None."""
     n = len(adj)
     if n < 3:
         return None

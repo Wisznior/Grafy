@@ -350,12 +350,12 @@ def z2_task3() -> None:
         st.write(f"Składowa {number}: {vertices} (rozmiar {len(vertices)})")
     biggest = largest_component(graph)
     st.success(f"Największa składowa: {biggest} — {len(biggest)} wierzchołków")
-    st.info("Wierzchołek 6 w grafie przykładowym jest izolowany (jego składowa ma rozmiar 1), dlatego nie należy do największej składowej. Nadal jest widoczny na rysunku grafu wejściowego poniżej.")
     st.pyplot(render_graph(graph, "Cały graf wejściowy"), use_container_width=False)
     subgraph = {u: [v for v in graph[u] if v in biggest] for u in biggest}
+    component_edges = [(u, v) for u in biggest for v in subgraph[u] if u < v]
     st.subheader("Podgraf największej składowej")
-    st.code(adj_to_text(subgraph))
-    st.pyplot(render_graph(subgraph, "Największa spójna składowa"), use_container_width=False)
+    st.code("\n".join(f"{u}: {', '.join(map(str, subgraph[u])) or '-'}" for u in biggest))
+    st.pyplot(render_graph(graph, "Największa spójna składowa (na czerwono)", highlight_edges=component_edges), use_container_width=False)
 
 
 def z2_task4() -> None:

@@ -3,7 +3,7 @@ from grafy.common.types import AdjList
 
 
 def build_graph(seq: list[int]) -> AdjList:
-    """Algorytm Havela-Hakimiego (degree_seq z materialow). ValueError, gdy ciag nie jest graficzny."""
+    """Algorytm Havela-Hakimiego (degree_seq z materialow)"""
     if any(d < 0 for d in seq) or sum(seq) % 2:
         raise ValueError("ciag nie jest graficzny")
     rem = [[d, i + 1] for i, d in enumerate(seq)]

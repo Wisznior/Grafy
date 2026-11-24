@@ -5,7 +5,7 @@ from grafy.common.types import AdjList
 
 
 def randomize(adj: AdjList, swaps: int, seed: int | None = None) -> AdjList:
-    """swaps razy: losowe krawedzie ab, cd -> ad, cb (stopnie bez zmian, bez petli i multikrawedzi)."""
+    """swaps razy: losowe krawedzie ab, cd -> ad, cb"""
     rng = random.Random(seed)
     edges = adj_to_edges(adj)
     present = set(edges)

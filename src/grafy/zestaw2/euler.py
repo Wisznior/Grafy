@@ -7,7 +7,7 @@ from grafy.zestaw2.randomization import randomize
 
 
 def random_eulerian_graph(n: int | None = None, seed: int | None = None) -> AdjList:
-    """Parzyste stopnie -> graf -> randomizacja -> najwieksza spojna skladowa (przenumerowana od 1)."""
+    """Parzyste stopnie -> graf -> randomizacja -> najwieksza spojna skladowa"""
     rng = random.Random(seed)
     n = n or rng.randint(5, 12)
     if n < 3:
@@ -36,7 +36,7 @@ def _reachable(g, u, target) -> bool:
 
 
 def euler_cycle(adj: AdjList, start: int | None = None) -> list[int]:
-    """Algorytm Fleury'ego: most przechodzimy tylko, gdy nie ma innej mozliwosci."""
+    """Algorytm Fleury'ego: most przechodzimy tylko, gdy nie ma innej mozliwosci"""
     g = {v: set(nb) for v, nb in adj.items()}
     if any(len(nb) % 2 for nb in g.values()):
         raise ValueError("graf nie jest eulerowski (nieparzysty stopien)")
