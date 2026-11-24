@@ -48,3 +48,13 @@ def test_flow_network_draws_flow_over_capacity(tmp_path):
 def test_generator_rejects_less_than_two_layers():
     with pytest.raises(ValueError):
         random_flow_network(1)
+
+
+def test_arc_list_round_trip_and_validation():
+    from grafy.zestaw5.flow_network import example_network, format_arc_list, parse_arc_list
+    network = example_network()
+    assert parse_arc_list(format_arc_list(network), network) == network.capacities
+    assert parse_arc_list("s -> a : 4\na→t 2  # komentarz\n\n", network) == {(0, 1): 4, (1, 10): 2}
+    for bad in ["s a", "s x 3", "a s 3", "t a 3", "a a 3", "a b 0", "a b x", "a b 1\na b 2", ""]:
+        with pytest.raises(ValueError):
+            parse_arc_list(bad, network)

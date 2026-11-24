@@ -24,7 +24,7 @@ from grafy.zestaw4.directed_graph import (adjacency_matrix, gnp_digraph, inciden
                                           random_strongly_connected_weighted_digraph)
 from grafy.zestaw4.johnson import johnson
 from grafy.zestaw4.scc import strongly_connected_components
-from grafy.zestaw5.flow_network import draw_flow_network, random_flow_network
+from grafy.zestaw5.flow_network import draw_flow_network, random_flow_network, vertex_label
 from grafy.zestaw5.max_flow import ford_fulkerson
 from grafy.zestaw6.pagerank import (pagerank_power_iteration, pagerank_random_walk,
                                     ranking, read_digraph)
@@ -162,8 +162,7 @@ def _project_file(*parts):
 def cmd_set5(a):
     network = random_flow_network(a.layers, a.seed)
     result = ford_fulkerson(network)
-    label = lambda vertex: "s" if vertex == network.source else (
-        "t" if vertex == network.sink else str(vertex))
+    label = lambda vertex: vertex_label(network, vertex)
     print("Zrodlo: s, ujscie: t")
     print("Luki (u v przeplyw/przepustowosc):")
     for (u, v), capacity in sorted(network.capacities.items()):

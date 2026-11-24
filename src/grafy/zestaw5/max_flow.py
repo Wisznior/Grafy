@@ -2,9 +2,19 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from grafy.zestaw5.flow_network import Arc, FlowNetwork
+
+
+@dataclass
+class AugmentationStep:
+    path: list[int]
+    amount: int
+    arcs: list[tuple[Arc, int]]
+    """Luki sciezki z kierunkiem: +1 zwiekszenie przeplywu, -1 cofniecie przeplywu."""
+    flows: dict[Arc, int]
+    """Przeplywy po wykonaniu tego kroku."""
 
 
 @dataclass
@@ -12,6 +22,7 @@ class MaxFlowResult:
     value: int
     flows: dict[Arc, int]
     augmentations: list[tuple[list[int], int]]
+    steps: list[AugmentationStep] = field(default_factory=list)
 
 
 def ford_fulkerson(network: FlowNetwork, source: int | None = None,
@@ -28,6 +39,7 @@ def ford_fulkerson(network: FlowNetwork, source: int | None = None,
 
     flows = {arc: 0 for arc in network.capacities}
     augmentations: list[tuple[list[int], int]] = []
+    steps: list[AugmentationStep] = []
     while True:
         residual: dict[int, list[tuple[int, Arc, int, int]]] = {v: [] for v in vertices}
         for (u, v), capacity in network.capacities.items():
@@ -64,9 +76,13 @@ def ford_fulkerson(network: FlowNetwork, source: int | None = None,
         amount = min(step[2] for step in path_steps)
         for arc, direction, _ in path_steps:
             flows[arc] += direction * amount
-        augmentations.append((list(reversed(path_vertices)), amount))
+        path = list(reversed(path_vertices))
+        augmentations.append((path, amount))
+        steps.append(AugmentationStep(path, amount,
+                                      [(arc, direction) for arc, direction, _ in reversed(path_steps)],
+                                      dict(flows)))
 
     value = sum(flow for (u, _), flow in flows.items() if u == source) - sum(
         flow for (_, v), flow in flows.items() if v == source
     )
-    return MaxFlowResult(value=value, flows=flows, augmentations=augmentations)
+    return MaxFlowResult(value=value, flows=flows, augmentations=augmentations, steps=steps)

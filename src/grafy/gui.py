@@ -22,7 +22,8 @@ from grafy.zestaw3.dijkstra import dijkstra, shortest_path
 from grafy.zestaw3.distances import distance_matrix
 from grafy.zestaw3.mst import minimum_spanning_tree
 from grafy.zestaw3.weighted_graph import random_connected_weighted_graph
-from grafy.zestaw5.flow_network import draw_flow_network, random_flow_network
+from grafy.zestaw5.flow_network import (FlowNetwork, example_network, flow_network_figure, format_arc_list,
+                                       parse_arc_list, random_flow_network, vertex_label)
 from grafy.zestaw5.max_flow import ford_fulkerson
 from grafy.zestaw6.pagerank import (pagerank_power_iteration, pagerank_random_walk, random_digraph,
                                     ranking, read_digraph)
@@ -487,68 +488,137 @@ def render_set3(task: int) -> None:
 
 
 # ---------------- Zestaw 5 ----------------
-def z5_network():
-    """Wspólna sieć dla obu zadań zestawu 5 (N warstw pośrednich + seed, jak w CLI)."""
-    c1, c2 = st.columns(2)
-    layers = c1.number_input("Liczba warstw pośrednich N", 2, 8, 3, key="z5_layers")
-    seed = c2.number_input("Seed", 0, 100000, 10, key="z5_seed")
-    return random_flow_network(int(layers), int(seed))
+Z5_SOURCES = ["Losowa sieć (N, seed)", "Przykład z treści (rys. 1)"]
 
 
-def z5_label(network, vertex: int) -> str:
-    return "s" if vertex == network.source else ("t" if vertex == network.sink else str(vertex))
+def z5_persistent(key: str, default):
+    """Wartości widżetów zestawu 5 przetrwają przełączanie między zadaniami 1 i 2."""
+    if key not in st.session_state:
+        st.session_state[key] = st.session_state.get(f"_{key}", default)
 
 
-def z5_image(network, flows=None) -> None:
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "flow.png"
-        draw_flow_network(network, path, flows)
-        st.image(path.read_bytes(), width=820)
+def z5_remember(*keys: str) -> None:
+    for key in keys:
+        st.session_state[f"_{key}"] = st.session_state[key]
+
+
+def z5_network() -> tuple[FlowNetwork, bool]:
+    """Wspólna sieć obu zadań: losowa albo z rys. 1, z ewentualnie zmienionymi przepustowościami."""
+    z5_persistent("z5_source", Z5_SOURCES[0])
+    z5_persistent("z5_layers", 3)
+    z5_persistent("z5_seed", 10)
+    source = st.radio("Sieć", Z5_SOURCES, horizontal=True, key="z5_source")
+    if source == Z5_SOURCES[0]:
+        c1, c2 = st.columns(2)
+        layers = c1.number_input("Liczba warstw pośrednich N", 2, 6, key="z5_layers")
+        seed = c2.number_input("Seed", 0, 100000, key="z5_seed")
+        base_key = ("random", int(layers), int(seed))
+        base = random_flow_network(int(layers), int(seed))
+    else:
+        base_key = ("example",)
+        base = example_network()
+    z5_remember("z5_source", "z5_layers", "z5_seed")
+    if st.session_state.get("z5_base_key") != base_key:
+        st.session_state["z5_base_key"] = base_key
+        st.session_state["z5_caps"] = dict(base.capacities)
+        st.session_state["z5_editor_version"] = st.session_state.get("z5_editor_version", 0) + 1
+    network = FlowNetwork(base.layers, dict(st.session_state["z5_caps"]))
+    return network, network.capacities != base.capacities
+
+
+def z5_show(fig) -> None:
+    st.pyplot(fig, width="stretch")
+    plt.close(fig)
 
 
 def z5_task1() -> None:
     st.markdown("### 1. Losowa sieć przepływowa")
     st.write("Sieć ma N warstw pośrednich (N ≥ 2), w każdej od 2 do N wierzchołków. Każdy wierzchołek ma łuk do "
              "następnej warstwy i z poprzedniej; dodatkowo 2N losowych łuków (bez łuków do źródła i z ujścia). "
-             "Przepustowości losowane z [1, 10].")
-    network = z5_network()
+             "Przepustowości losowane z [1, 10] — możesz edytować listę łuków (zmieniać przepustowości, "
+             "dodawać i usuwać łuki), zadanie 2 policzy przepływ dla zmienionej sieci.")
+    network, edited = z5_network()
     m1, m2, m3 = st.columns(3)
     m1.metric("Wierzchołki", len(network.vertices))
     m2.metric("Łuki", len(network.capacities))
     m3.metric("Szerokości warstw", " · ".join(str(len(layer)) for layer in network.layers))
+
     left, right = st.columns([1, 3])
     with left:
-        rows = [{"Z": z5_label(network, u), "Do": z5_label(network, v), "Przepustowość": c}
-                for (u, v), c in sorted(network.capacities.items())]
-        st.dataframe(rows, use_container_width=True, hide_index=True, height=420)
+        st.subheader("Łuki")
+        st.caption("Jeden łuk na wiersz: `z do przepustowość`, np. `s a 10`. Usuń wiersz, aby usunąć łuk; "
+                   "dopisz nowy, aby go dodać.")
+        text_key = f"z5_arcs_text_{st.session_state['z5_editor_version']}"
+        if text_key not in st.session_state:
+            st.session_state[text_key] = format_arc_list(network)
+        st.text_area("Lista łuków", key=text_key, height=380, label_visibility="collapsed")
+        apply, reset = st.columns(2)
+        if apply.button("Zastosuj", type="primary", width="stretch"):
+            try:
+                st.session_state["z5_caps"] = parse_arc_list(st.session_state[text_key], network)
+                st.session_state.pop(text_key)
+                st.session_state["z5_message"] = "Sieć zaktualizowana."
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+        if reset.button("Przywróć wylosowaną", disabled=not edited, width="stretch"):
+            st.session_state.pop("z5_base_key", None)
+            st.rerun()
+        if message := st.session_state.pop("z5_message", None):
+            st.success(message)
+        elif edited:
+            st.caption("Sieć zmieniona ręcznie.")
     with right:
-        z5_image(network)
+        z5_show(flow_network_figure(network))
 
 
 def z5_task2() -> None:
     st.markdown("### 2. Maksymalny przepływ — Ford-Fulkerson (Edmonds-Karp)")
-    st.write("Ścieżki powiększające są wybierane jako najkrótsze (BFS) w sieci rezydualnej; łuki rezydualne "
-             "pozwalają cofnąć część wcześniejszego przepływu. Łuki opisane jako `przepływ/przepustowość`.")
-    network = z5_network()
+    st.write("Ścieżki powiększające są wybierane jako najkrótsze (BFS) w sieci rezydualnej. Suwakiem przejdź "
+             "przez kolejne iteracje: bieżąca ścieżka jest zielona, a łuk, po którym idziemy pod prąd "
+             "(cofnięcie przepływu), pomarańczowy i przerywany.")
+    network, edited = z5_network()
+    if edited:
+        st.info("Sieć została zmieniona ręcznie w zadaniu 1.")
     result = ford_fulkerson(network)
-    label = lambda v: z5_label(network, v)
+    label = lambda v: vertex_label(network, v)
     saturated = sum(result.flows[arc] == cap for arc, cap in network.capacities.items())
     m1, m2, m3 = st.columns(3)
-    m1.metric("Maksymalny przepływ", result.value)
-    m2.metric("Ścieżki powiększające", len(result.augmentations))
+    m1.metric("Maksymalny przepływ |f_max|", result.value)
+    m2.metric("Ścieżki powiększające", len(result.steps))
     m3.metric("Łuki nasycone", f"{saturated} / {len(network.capacities)}")
-    z5_image(network, result.flows)
-    left, right = st.columns(2)
+
+    total = len(result.steps)
+    slider_key = f"z5_step_{hash((st.session_state['z5_base_key'], tuple(sorted(network.capacities.items()))))}"
+    k = st.slider("Iteracja k (0 = przepływ zerowy)", 0, total, total, key=slider_key) if total else 0
+    if k == 0:
+        flows, arcs, amount = {arc: 0 for arc in network.capacities}, None, None
+        title = "Iteracja 0: przepływ zerowy"
+    else:
+        step = result.steps[k - 1]
+        flows, arcs, amount = step.flows, step.arcs, step.amount
+        title = f"Iteracja {k} z {total}: ścieżka {' → '.join(map(label, step.path))}, przyrost +{amount}"
+        cancelled = [arc for arc, direction in step.arcs if direction < 0]
+        if cancelled:
+            st.warning("Cofnięcie przepływu: ścieżka przechodzi pod prąd po łuku "
+                       + ", ".join(f"{label(u)}→{label(v)}" for u, v in cancelled)
+                       + f", więc jego przepływ maleje o {amount}.")
+    value = sum(f for (u, _), f in flows.items() if u == network.source)
+    st.write(f"Wartość przepływu po iteracji {k}: **{value}**"
+             + (" — to przepływ maksymalny." if k == total else ""))
+    left, right = st.columns([3, 1.3])
     with left:
-        st.subheader("Ścieżki powiększające")
-        st.dataframe([{"#": i, "Ścieżka": " → ".join(map(label, path)), "Przyrost": f"+{amount}"}
-                      for i, (path, amount) in enumerate(result.augmentations, 1)],
-                     use_container_width=True, hide_index=True)
+        z5_show(flow_network_figure(network, flows, arcs, amount, title))
     with right:
-        st.subheader("Przepływ na łukach")
-        st.dataframe([{"Z": label(u), "Do": label(v), "Przepływ": result.flows[(u, v)], "Przepustowość": c}
+        st.subheader("Ścieżki powiększające")
+        st.dataframe([{"#": i, "Ścieżka": " → ".join(map(label, s.path)), "Przyrost": f"+{s.amount}",
+                       "Cofnięcie": ", ".join(f"{label(u)}→{label(v)}" for (u, v), d in s.arcs if d < 0) or "—",
+                       "": "◀" if i == k else ""}
+                      for i, s in enumerate(result.steps, 1)], width="stretch", hide_index=True)
+        st.subheader(f"Przepływ po iteracji {k}")
+        st.dataframe([{"Z": label(u), "Do": label(v), "Przepływ": flows[(u, v)], "Przepustowość": c}
                       for (u, v), c in sorted(network.capacities.items())],
-                     use_container_width=True, hide_index=True)
+                     width="stretch", hide_index=True, height=300)
 
 
 def render_set5(task: int) -> None:
