@@ -1,4 +1,7 @@
+import random
 import re
+import tempfile
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import streamlit as st
@@ -19,6 +22,13 @@ from grafy.zestaw3.dijkstra import dijkstra, shortest_path
 from grafy.zestaw3.distances import distance_matrix
 from grafy.zestaw3.mst import minimum_spanning_tree
 from grafy.zestaw3.weighted_graph import random_connected_weighted_graph
+from grafy.zestaw5.flow_network import draw_flow_network, random_flow_network
+from grafy.zestaw5.max_flow import ford_fulkerson
+from grafy.zestaw6.pagerank import (pagerank_power_iteration, pagerank_random_walk, random_digraph,
+                                    ranking, read_digraph)
+from grafy.zestaw6.tsp import read_points, simulated_annealing, tour_length
+
+ZESTAW6_DATA = Path(__file__).resolve().parents[2] / "data" / "examples" / "zestaw6"
 
 
 def normalize_graph(adj: AdjList | None) -> AdjList:
@@ -476,10 +486,229 @@ def render_set3(task: int) -> None:
     {1: z3_task1, 2: z3_task2, 3: z3_task3, 4: z3_task4, 5: z3_task5}[task]()
 
 
+# ---------------- Zestaw 5 ----------------
+def z5_network():
+    """Wspólna sieć dla obu zadań zestawu 5 (N warstw pośrednich + seed, jak w CLI)."""
+    c1, c2 = st.columns(2)
+    layers = c1.number_input("Liczba warstw pośrednich N", 2, 8, 3, key="z5_layers")
+    seed = c2.number_input("Seed", 0, 100000, 10, key="z5_seed")
+    return random_flow_network(int(layers), int(seed))
+
+
+def z5_label(network, vertex: int) -> str:
+    return "s" if vertex == network.source else ("t" if vertex == network.sink else str(vertex))
+
+
+def z5_image(network, flows=None) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "flow.png"
+        draw_flow_network(network, path, flows)
+        st.image(path.read_bytes(), width=820)
+
+
+def z5_task1() -> None:
+    st.markdown("### 1. Losowa sieć przepływowa")
+    st.write("Sieć ma N warstw pośrednich (N ≥ 2), w każdej od 2 do N wierzchołków. Każdy wierzchołek ma łuk do "
+             "następnej warstwy i z poprzedniej; dodatkowo 2N losowych łuków (bez łuków do źródła i z ujścia). "
+             "Przepustowości losowane z [1, 10].")
+    network = z5_network()
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Wierzchołki", len(network.vertices))
+    m2.metric("Łuki", len(network.capacities))
+    m3.metric("Szerokości warstw", " · ".join(str(len(layer)) for layer in network.layers))
+    left, right = st.columns([1, 3])
+    with left:
+        rows = [{"Z": z5_label(network, u), "Do": z5_label(network, v), "Przepustowość": c}
+                for (u, v), c in sorted(network.capacities.items())]
+        st.dataframe(rows, use_container_width=True, hide_index=True, height=420)
+    with right:
+        z5_image(network)
+
+
+def z5_task2() -> None:
+    st.markdown("### 2. Maksymalny przepływ — Ford-Fulkerson (Edmonds-Karp)")
+    st.write("Ścieżki powiększające są wybierane jako najkrótsze (BFS) w sieci rezydualnej; łuki rezydualne "
+             "pozwalają cofnąć część wcześniejszego przepływu. Łuki opisane jako `przepływ/przepustowość`.")
+    network = z5_network()
+    result = ford_fulkerson(network)
+    label = lambda v: z5_label(network, v)
+    saturated = sum(result.flows[arc] == cap for arc, cap in network.capacities.items())
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Maksymalny przepływ", result.value)
+    m2.metric("Ścieżki powiększające", len(result.augmentations))
+    m3.metric("Łuki nasycone", f"{saturated} / {len(network.capacities)}")
+    z5_image(network, result.flows)
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Ścieżki powiększające")
+        st.dataframe([{"#": i, "Ścieżka": " → ".join(map(label, path)), "Przyrost": f"+{amount}"}
+                      for i, (path, amount) in enumerate(result.augmentations, 1)],
+                     use_container_width=True, hide_index=True)
+    with right:
+        st.subheader("Przepływ na łukach")
+        st.dataframe([{"Z": label(u), "Do": label(v), "Przepływ": result.flows[(u, v)], "Przepustowość": c}
+                      for (u, v), c in sorted(network.capacities.items())],
+                     use_container_width=True, hide_index=True)
+
+
+def render_set5(task: int) -> None:
+    {1: z5_task1, 2: z5_task2}[task]()
+
+
+# ---------------- Zestaw 6 ----------------
+def parse_digraph_text(raw: str):
+    """Parsuje digraf `wierzcholek: sasiedzi` tym samym parserem co CLI (read_digraph)."""
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as tmp:
+        tmp.write(raw)
+    try:
+        return read_digraph(tmp.name)
+    finally:
+        Path(tmp.name).unlink(missing_ok=True)
+
+
+def digraph_to_text(graph) -> str:
+    return "\n".join(f"{v}: {' '.join(map(str, graph[v]))}" for v in graph)
+
+
+def render_digraph(graph, scores=None, title: str = "Digraf"):
+    nodes = list(graph)
+    fig, ax = plt.subplots(figsize=(5.2, 4.8), dpi=100)
+    pos_list = circle_layout(len(nodes), r=.82)
+    pos = {node: pos_list[i] for i, node in enumerate(nodes)}
+    top = max(scores.values()) if scores else 1
+    for u in nodes:
+        for v in graph[u]:
+            ax.annotate("", xy=pos[v], xytext=pos[u], zorder=1,
+                        arrowprops={"arrowstyle": "-|>", "color": "#2c7be5", "lw": .9, "alpha": .7,
+                                    "shrinkA": 11, "shrinkB": 11, "connectionstyle": "arc3,rad=.08"})
+    for node, (x, y) in pos.items():
+        share = scores[node] / top if scores else .3
+        ax.text(x, y, str(node), fontsize=8, ha="center", va="center", zorder=2,
+                bbox={"boxstyle": "circle,pad=.35", "fc": plt.cm.Blues(.15 + .75 * share),
+                      "ec": "#1d4e89", "lw": .8},
+                color="white" if share > .6 else "black")
+    ax.set_aspect("equal")
+    ax.set_xlim(-1.1, 1.1)
+    ax.set_ylim(-1.1, 1.1)
+    ax.axis("off")
+    ax.set_title(title, fontsize=10, pad=5)
+    fig.tight_layout(pad=.25)
+    return fig
+
+
+def z6_task1() -> None:
+    st.markdown("### 1. PageRank — dwie metody")
+    st.write("Losowy spacer z teleportacją (częstość odwiedzin) oraz iteracja rozkładu prawdopodobieństwa do zbieżności. "
+             "Z prawdopodobieństwem d spacer teleportuje się do losowego wierzchołka.")
+    source = st.radio("Graf", ["Przykład z zestawu 6", "Losowy digraf"], horizontal=True, key="z6_pr_source")
+    if source == "Przykład z zestawu 6":
+        if "z6_pr_text" not in st.session_state:
+            st.session_state["z6_pr_text"] = digraph_to_text(read_digraph(ZESTAW6_DATA / "pagerank_graph.txt"))
+        st.caption("Każdy wiersz: `wierzchołek: sąsiedzi` (łuki wychodzące).")
+        st.text_area("Lista sąsiedztwa digrafu", key="z6_pr_text", height=200)
+        try:
+            graph = parse_digraph_text(st.session_state["z6_pr_text"])
+        except ValueError as exc:
+            st.error(f"Niepoprawny digraf: {exc}")
+            return
+    else:
+        c1, c2, c3 = st.columns(3)
+        n = c1.number_input("Liczba wierzchołków n", 2, 40, 12, key="z6_pr_n")
+        p = c2.slider("Prawdopodobieństwo łuku p", 0.0, 1.0, .2, .01, key="z6_pr_p")
+        gseed = c3.number_input("Seed grafu", 0, 100000, 0, key="z6_pr_gseed")
+        graph = random_digraph(int(n), p, int(gseed))
+        with st.expander("Lista sąsiedztwa wylosowanego digrafu"):
+            st.code(digraph_to_text(graph))
+    c1, c2, c3 = st.columns(3)
+    damping = c1.slider("Teleportacja d", 0.0, 1.0, .15, .01, key="z6_pr_d")
+    steps = c2.number_input("Kroki spaceru", 1000, 2_000_000, 200_000, 50_000, key="z6_pr_steps")
+    seed = c3.number_input("Seed spaceru", 0, 100000, 10, key="z6_pr_seed")
+
+    walk = pagerank_random_walk(graph, damping, int(steps), int(seed))
+    power, iterations = pagerank_power_iteration(graph, damping)
+    rows = [{"#": i, "Wierzchołek": str(node), "Losowy spacer": round(walk[node], 6),
+             "Iteracja": round(score, 6), "Różnica": round(abs(walk[node] - score), 6)}
+            for i, (node, score) in enumerate(ranking(power), 1)]
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Wierzchołki", len(graph))
+    m2.metric("Iteracje do zbieżności", iterations)
+    m3.metric("Maks. różnica metod", f"{max(r['Różnica'] for r in rows):.6f}")
+    left, right = st.columns([3, 2])
+    with left:
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    with right:
+        st.pyplot(render_digraph(graph, power, "Kolor = PageRank (iteracja)"), use_container_width=False)
+
+
+def random_points(n: int, seed: int) -> list[tuple[float, float]]:
+    rng = random.Random(seed)
+    return [(round(rng.uniform(0, 100), 2), round(rng.uniform(0, 100), 2)) for _ in range(n)]
+
+
+def render_tour(points, tour, title: str):
+    ordered = [points[i] for i in tour] + [points[tour[0]]]
+    fig, ax = plt.subplots(figsize=(6.4, 5), dpi=100)
+    ax.plot([p[0] for p in ordered], [p[1] for p in ordered], color="#2364aa", linewidth=.9,
+            marker="o", markersize=2.5)
+    ax.plot(*points[tour[0]], marker="o", color="#e63946", markersize=6)
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.set_title(title, fontsize=10)
+    ax.grid(alpha=.18)
+    fig.tight_layout(pad=.25)
+    return fig
+
+
+def z6_task2() -> None:
+    st.markdown("### 2. TSP — symulowane wyżarzanie")
+    st.write("Kandydat powstaje ruchem 2-opt (odwrócenie fragmentu trasy). Gorszy ruch jest akceptowany z "
+             "prawdopodobieństwem exp(−Δ/T), a temperatura maleje wykładniczo. Wynik jest heurystyczny.")
+    source = st.radio("Punkty", ["Przykład z zestawu 6", "Losowe punkty"], horizontal=True, key="z6_tsp_source")
+    if source == "Przykład z zestawu 6":
+        points = read_points(ZESTAW6_DATA / "tsp_points.txt")
+    else:
+        c1, c2 = st.columns(2)
+        n = c1.number_input("Liczba punktów", 4, 500, 50, key="z6_tsp_n")
+        pseed = c2.number_input("Seed punktów", 0, 100000, 0, key="z6_tsp_pseed")
+        points = random_points(int(n), int(pseed))
+    c1, c2 = st.columns(2)
+    iterations = c1.number_input("Liczba prób 2-opt", 1000, 2_000_000, 200_000, 50_000, key="z6_tsp_iter")
+    seed = c2.number_input("Seed wyżarzania", 0, 100000, 10, key="z6_tsp_seed")
+    config = (source, tuple(points), int(iterations), int(seed))
+    if st.button("Uruchom wyżarzanie", key="z6_tsp_run", type="primary"):
+        with st.spinner("Wyżarzanie…"):
+            # seed + 1 jak w CLI (`python -m grafy set6 --seed S`), żeby wyniki były zgodne.
+            tour, length = simulated_annealing(points, int(iterations), int(seed) + 1)
+        st.session_state["z6_tsp_result"] = (config, tour, length)
+    start = list(range(len(points)))
+    start_length = tour_length(points, start)
+    result = st.session_state.get("z6_tsp_result")
+    if not result or result[0] != config:
+        st.info(f"{len(points)} punktów · długość trasy w kolejności z pliku: {start_length:.3f}. "
+                "Kliknij „Uruchom wyżarzanie”.")
+        st.pyplot(render_tour(points, start, f"Trasa początkowa, długość: {start_length:.3f}"),
+                  use_container_width=False)
+        return
+    _, tour, length = result
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Punkty", len(points))
+    m2.metric("Długość początkowa", f"{start_length:.3f}")
+    m3.metric("Znaleziona trasa", f"{length:.3f}", f"{(length - start_length) / start_length:+.1%}",
+              delta_color="inverse")
+    st.pyplot(render_tour(points, tour, f"Trasa TSP, długość: {length:.3f}"), use_container_width=False)
+    with st.expander("Kolejność wierzchołków (indeksy od 1)"):
+        st.code(" ".join(str(i + 1) for i in tour + [tour[0]]))
+
+
+def render_set6(task: int) -> None:
+    {1: z6_task1, 2: z6_task2}[task]()
+
+
 SETS = {
     "Zestaw 1": ["1. Kodowanie grafów i konwersja", "2. Wizualizacja na okręgu", "3. Generowanie grafów losowych G(n, l), G(n, p)"],
     "Zestaw 2": ["1. Ciąg graficzny", "2. Randomizacja", "3. Największa spójna składowa", "4. Graf eulerowski i cykl Eulera", "5. Graf k-regularny", "6. Hamiltonowość"],
     "Zestaw 3": ["1. Graf ważony", "2. Algorytm Dijkstry", "3. Macierz odległości", "4. Centrum i centrum minimax", "5. Minimalne drzewo rozpinające"],
+    "Zestaw 5": ["1. Losowa sieć przepływowa", "2. Maksymalny przepływ (Ford-Fulkerson)"],
+    "Zestaw 6": ["1. PageRank", "2. TSP — symulowane wyżarzanie"],
 }
 
 
@@ -496,8 +725,12 @@ def main() -> None:
         render_set1(task)
     elif selected_set == "Zestaw 2":
         render_set2(task)
-    else:
+    elif selected_set == "Zestaw 3":
         render_set3(task)
+    elif selected_set == "Zestaw 5":
+        render_set5(task)
+    else:
+        render_set6(task)
 
 
 if __name__ == "__main__":
