@@ -1,0 +1,13 @@
+# Lista sasiedztwa z przykladu w materialach do zestawu 6.
+A: E F I
+B: A C F
+C: B D E L
+D: C E H I K
+E: C G H I
+F: B G
+G: E F H
+H: D G I L
+I: D E H J
+J: I
+K: D I
+L: A H
