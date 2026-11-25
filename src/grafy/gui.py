@@ -27,7 +27,7 @@ from grafy.zestaw5.flow_network import (FlowNetwork, example_network, flow_netwo
 from grafy.zestaw5.max_flow import ford_fulkerson
 from grafy.zestaw6.pagerank import (pagerank_power_iteration, pagerank_random_walk, random_digraph,
                                     ranking, read_digraph)
-from grafy.zestaw6.tsp import read_points, simulated_annealing, tour_length
+from grafy.zestaw6.tsp import read_points, simulated_annealing_runs, tour_length
 
 ZESTAW6_DATA = Path(__file__).resolve().parents[2] / "data" / "examples" / "zestaw6"
 
@@ -666,10 +666,21 @@ def render_digraph(graph, scores=None, title: str = "Digraf"):
     return fig
 
 
+def pagerank_listing(scores) -> str:
+    return "\n".join(f"{node} ==> PageRank = {score:.6f}" for node, score in ranking(scores))
+
+
 def z6_task1() -> None:
     st.markdown("### 1. PageRank — dwie metody")
-    st.write("Losowy spacer z teleportacją (częstość odwiedzin) oraz iteracja rozkładu prawdopodobieństwa do zbieżności. "
-             "Z prawdopodobieństwem d spacer teleportuje się do losowego wierzchołka.")
+    st.write("Obie metody liczą PageRank dla tego samego digrafu. Z prawdopodobieństwem d następuje "
+             "teleportacja do losowego wierzchołka, a z prawdopodobieństwem 1 − d przejście po losowym "
+             "łuku wychodzącym.")
+    a_col, b_col = st.columns(2)
+    a_col.info("**(a) Błądzenie przypadkowe z teleportacją**  \n"
+               "PageRank = częstość odwiedzin wierzchołka w N krokach spaceru.")
+    b_col.info("**(b) Iteracja wektora obsadzeń**  \n"
+               "p₀ = (1/n, …, 1/n), pₜ₊₁ = pₜP, gdzie Pᵢⱼ = (1 − d)·Aᵢⱼ/dᵢ + d/n. "
+               "PageRank = wektor po zbieżności (średnia, gdy wartości oscylują).")
     source = st.radio("Graf", ["Przykład z zestawu 6", "Losowy digraf"], horizontal=True, key="z6_pr_source")
     if source == "Przykład z zestawu 6":
         if "z6_pr_text" not in st.session_state:
@@ -691,23 +702,37 @@ def z6_task1() -> None:
             st.code(digraph_to_text(graph))
     c1, c2, c3 = st.columns(3)
     damping = c1.slider("Teleportacja d", 0.0, 1.0, .15, .01, key="z6_pr_d")
-    steps = c2.number_input("Kroki spaceru", 1000, 2_000_000, 200_000, 50_000, key="z6_pr_steps")
-    seed = c3.number_input("Seed spaceru", 0, 100000, 10, key="z6_pr_seed")
+    steps = c2.number_input("(a) Kroki błądzenia N", 1000, 2_000_000, 1_000_000, 50_000, key="z6_pr_steps")
+    seed = c3.number_input("(a) Seed błądzenia", 0, 100000, 10, key="z6_pr_seed")
 
     walk = pagerank_random_walk(graph, damping, int(steps), int(seed))
     power, iterations = pagerank_power_iteration(graph, damping)
-    rows = [{"#": i, "Wierzchołek": str(node), "Losowy spacer": round(walk[node], 6),
-             "Iteracja": round(score, 6), "Różnica": round(abs(walk[node] - score), 6)}
-            for i, (node, score) in enumerate(ranking(power), 1)]
+    converged = iterations < 10_000
     m1, m2, m3 = st.columns(3)
     m1.metric("Wierzchołki", len(graph))
-    m2.metric("Iteracje do zbieżności", iterations)
-    m3.metric("Maks. różnica metod", f"{max(r['Różnica'] for r in rows):.6f}")
+    m2.metric("(b) Iteracje do zbieżności", iterations if converged else "brak — średnia")
+    m3.metric("Maks. różnica |(a) − (b)|", f"{max(abs(walk[v] - power[v]) for v in graph):.6f}")
+
+    a_col, b_col = st.columns(2)
+    with a_col:
+        st.subheader("(a) Błądzenie przypadkowe")
+        st.caption(f"Efekt N = {int(steps):,} kroków błądzenia z teleportacją".replace(",", " "))
+        st.code(pagerank_listing(walk), language=None)
+    with b_col:
+        st.subheader("(b) Iteracja wektora obsadzeń")
+        st.caption(f"Zbieżność uzyskano po {iterations} iteracjach" if converged
+                   else "Wartości oscylują — PageRank to średnia z drugiej połowy iteracji")
+        st.code(pagerank_listing(power), language=None)
+
     left, right = st.columns([3, 2])
     with left:
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.subheader("Porównanie metod")
+        rows = [{"#": i, "Wierzchołek": str(node), "(a) błądzenie": round(walk[node], 6),
+                 "(b) iteracja": round(score, 6), "|(a) − (b)|": round(abs(walk[node] - score), 6)}
+                for i, (node, score) in enumerate(ranking(power), 1)]
+        st.dataframe(rows, width="stretch", hide_index=True)
     with right:
-        st.pyplot(render_digraph(graph, power, "Kolor = PageRank (iteracja)"), use_container_width=False)
+        st.pyplot(render_digraph(graph, power, "Kolor = PageRank metodą (b)"), width="content")
 
 
 def random_points(n: int, seed: int) -> list[tuple[float, float]]:
@@ -715,58 +740,98 @@ def random_points(n: int, seed: int) -> list[tuple[float, float]]:
     return [(round(rng.uniform(0, 100), 2), round(rng.uniform(0, 100), 2)) for _ in range(n)]
 
 
-def render_tour(points, tour, title: str):
+def render_tour(points, tour, title: str, color: str = "#2364aa"):
     ordered = [points[i] for i in tour] + [points[tour[0]]]
-    fig, ax = plt.subplots(figsize=(6.4, 5), dpi=100)
-    ax.plot([p[0] for p in ordered], [p[1] for p in ordered], color="#2364aa", linewidth=.9,
-            marker="o", markersize=2.5)
-    ax.plot(*points[tour[0]], marker="o", color="#e63946", markersize=6)
+    fig, ax = plt.subplots(figsize=(6.4, 4.6), dpi=100)
+    ax.plot([p[0] for p in ordered], [p[1] for p in ordered], color=color, linewidth=.9,
+            marker="o", markersize=2.8)
     ax.set_aspect("equal", adjustable="datalim")
-    ax.set_title(title, fontsize=10)
+    ax.set_title(title, fontsize=11)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
     ax.grid(alpha=.18)
-    fig.tight_layout(pad=.25)
+    fig.tight_layout(pad=.3)
+    return fig
+
+
+def render_annealing_trace(result):
+    fig, ax = plt.subplots(figsize=(10, 3.2), dpi=100)
+    ax.plot(range(len(result.trace)), result.trace, color="#2364aa", linewidth=1)
+    for run, start in enumerate(result.run_starts):
+        ax.axvline(start, color="#9aa5b1", linewidth=.8, linestyle=":")
+        ax.text(start, 1.01, f"przebieg {run + 1}", fontsize=8, color="#52606d", va="bottom",
+                transform=ax.get_xaxis_transform())
+    ax.axhline(result.length, color="#2ca02c", linewidth=1, linestyle="--",
+               label=f"najkrótszy cykl: {result.length:.3f}")
+    ax.set_yscale("log")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: f"{value:g}"))
+    ax.yaxis.set_minor_formatter(plt.FuncFormatter(lambda value, _: f"{value:g}"))
+    ax.set_xticks([])
+    ax.set_xlabel("kolejne próby 2-opt (w każdym przebiegu T = 0.001·i², i = 100 → 1)")
+    ax.set_ylabel("długość cyklu (skala log.)")
+    ax.legend(loc="center right", fontsize=9, frameon=True)
+    ax.grid(alpha=.18)
+    fig.tight_layout(pad=.3)
     return fig
 
 
 def z6_task2() -> None:
-    st.markdown("### 2. TSP — symulowane wyżarzanie")
-    st.write("Kandydat powstaje ruchem 2-opt (odwrócenie fragmentu trasy). Gorszy ruch jest akceptowany z "
-             "prawdopodobieństwem exp(−Δ/T), a temperatura maleje wykładniczo. Wynik jest heurystyczny.")
-    source = st.radio("Punkty", ["Przykład z zestawu 6", "Losowe punkty"], horizontal=True, key="z6_tsp_source")
-    if source == "Przykład z zestawu 6":
+    st.markdown("### 2. Komiwojażer — symulowane wyżarzanie")
+    st.write("Krok łańcucha Markowa to ruch 2-opt: losujemy dwie różne, niesąsiednie krawędzie (a, b), (c, d) "
+             "i zamieniamy je na (a, c), (b, d), odwracając fragment między b i c. Krótszy cykl przyjmujemy "
+             "zawsze, dłuższy z prawdopodobieństwem exp(−Δ/T) (Metropolis-Hastings). Chłodzenie kwadratowe "
+             "jak w alg_6: dla i = 100, 99, …, 1 temperatura T = 0.001·i² (od 10 do 0.001) i dla każdej "
+             "temperatury MAX_IT prób 2-opt. Całą procedurę powtarzamy kilka razy i zostawiamy najkrótszy cykl.")
+    source = st.radio("Punkty", ["Przykład z zestawu 6 (xqf131)", "Losowe punkty"], horizontal=True,
+                      key="z6_tsp_source")
+    if source.startswith("Przykład"):
         points = read_points(ZESTAW6_DATA / "tsp_points.txt")
     else:
         c1, c2 = st.columns(2)
         n = c1.number_input("Liczba punktów", 4, 500, 50, key="z6_tsp_n")
         pseed = c2.number_input("Seed punktów", 0, 100000, 0, key="z6_tsp_pseed")
         points = random_points(int(n), int(pseed))
-    c1, c2 = st.columns(2)
-    iterations = c1.number_input("Liczba prób 2-opt", 1000, 2_000_000, 200_000, 50_000, key="z6_tsp_iter")
-    seed = c2.number_input("Seed wyżarzania", 0, 100000, 10, key="z6_tsp_seed")
-    config = (source, tuple(points), int(iterations), int(seed))
+    c1, c2, c3 = st.columns(3)
+    runs = c1.number_input("Liczba przebiegów", 1, 50, 5, key="z6_tsp_runs")
+    max_it = c2.number_input("MAX_IT (próby 2-opt na temperaturę)", 10, 20_000, 2_000, 500, key="z6_tsp_max_it")
+    seed = c3.number_input("Seed wyżarzania", 0, 100000, 10, key="z6_tsp_seed")
+    from_best = st.checkbox("Kolejne przebiegi startują z najlepszego dotychczasowego cyklu", True,
+                            key="z6_tsp_from_best")
+    config = (source, tuple(points), int(runs), int(max_it), int(seed), from_best)
     if st.button("Uruchom wyżarzanie", key="z6_tsp_run", type="primary"):
         with st.spinner("Wyżarzanie…"):
-            # seed + 1 jak w CLI (`python -m grafy set6 --seed S`), żeby wyniki były zgodne.
-            tour, length = simulated_annealing(points, int(iterations), int(seed) + 1)
-        st.session_state["z6_tsp_result"] = (config, tour, length)
+            st.session_state["z6_tsp_result"] = (config, simulated_annealing_runs(
+                points, int(runs), int(max_it), int(seed), start_from_best=from_best))
     start = list(range(len(points)))
     start_length = tour_length(points, start)
-    result = st.session_state.get("z6_tsp_result")
-    if not result or result[0] != config:
-        st.info(f"{len(points)} punktów · długość trasy w kolejności z pliku: {start_length:.3f}. "
+    stored = st.session_state.get("z6_tsp_result")
+    if not stored or stored[0] != config:
+        st.info(f"{len(points)} punktów · cykl początkowy (kolejność z pliku) ma długość {start_length:.3f}. "
                 "Kliknij „Uruchom wyżarzanie”.")
-        st.pyplot(render_tour(points, start, f"Trasa początkowa, długość: {start_length:.3f}"),
-                  use_container_width=False)
+        st.pyplot(render_tour(points, start, f"Cykl początkowy o długości: {start_length:.3f}", "#e63946"),
+                  width="content")
         return
-    _, tour, length = result
+    result = stored[1]
     m1, m2, m3 = st.columns(3)
     m1.metric("Punkty", len(points))
-    m2.metric("Długość początkowa", f"{start_length:.3f}")
-    m3.metric("Znaleziona trasa", f"{length:.3f}", f"{(length - start_length) / start_length:+.1%}",
-              delta_color="inverse")
-    st.pyplot(render_tour(points, tour, f"Trasa TSP, długość: {length:.3f}"), use_container_width=False)
+    m2.metric("Cykl początkowy", f"{start_length:.3f}")
+    m3.metric("Najkrótszy znaleziony cykl", f"{result.length:.3f}",
+              f"{(result.length - start_length) / start_length:+.1%}", delta_color="inverse")
+    left, right = st.columns(2)
+    with left:
+        st.pyplot(render_tour(points, start, f"Cykl początkowy o długości: {start_length:.3f}", "#e63946"),
+                  width="stretch")
+    with right:
+        st.pyplot(render_tour(points, result.tour, f"Cykl wyjściowy. Długość cyklu: {result.length:.3f}"),
+                  width="stretch")
+    st.subheader("Przebieg wyżarzania")
+    st.pyplot(render_annealing_trace(result), width="stretch")
+    best_run = min(range(len(result.run_lengths)), key=result.run_lengths.__getitem__)
+    st.dataframe([{"Przebieg": i, "Start z": "cyklu początkowego" if i == 1 or not from_best else "najlepszego dotąd",
+                   "Długość": round(length, 3), "": "◀ najlepszy" if i - 1 == best_run else ""}
+                  for i, length in enumerate(result.run_lengths, 1)], width="stretch", hide_index=True)
     with st.expander("Kolejność wierzchołków (indeksy od 1)"):
-        st.code(" ".join(str(i + 1) for i in tour + [tour[0]]))
+        st.code(" ".join(str(i + 1) for i in result.tour + [result.tour[0]]))
 
 
 def render_set6(task: int) -> None:

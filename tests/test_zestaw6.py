@@ -13,6 +13,7 @@ from grafy.zestaw6.tsp import (
     draw_tour,
     read_points,
     simulated_annealing,
+    simulated_annealing_runs,
     tour_length,
     two_opt_swap,
 )
@@ -56,11 +57,29 @@ def test_two_opt_is_valid_and_changes_only_route_order():
 def test_simulated_annealing_improves_course_tsp_data_and_is_reproducible():
     points = read_points(POINTS)
     initial_length = tour_length(points, list(range(len(points))))
-    tour, length = simulated_annealing(points, iterations=20_000, seed=21)
-    second_tour, second_length = simulated_annealing(points, iterations=20_000, seed=21)
+    tour, length = simulated_annealing(points, max_it=200, seed=21)
+    second_tour, second_length = simulated_annealing(points, max_it=200, seed=21)
     assert len(tour) == len(points) and sorted(tour) == list(range(len(points)))
     assert length < initial_length
     assert (tour, length) == (second_tour, second_length)
+
+
+def test_annealing_runs_keep_best_cycle_and_trace():
+    points = read_points(POINTS)
+    result = simulated_annealing_runs(points, runs=3, max_it=50, seed=4)
+    assert sorted(result.tour) == list(range(len(points)))
+    assert math.isclose(result.length, tour_length(points, result.tour))
+    assert result.length == min(result.run_lengths)
+    assert result.run_lengths == sorted(result.run_lengths, reverse=True)
+    assert len(result.run_starts) == 3 and result.trace[0] > result.length
+
+
+def test_power_iteration_averages_oscillating_values():
+    # Graf dwudzielny przy d = 0: wektor obsadzen oscyluje miedzy (1/3, 1/3, 1/3) i (2/3, 1/6, 1/6).
+    scores, iterations = pagerank_power_iteration({1: [2, 3], 2: [1], 3: [1]}, damping=0.0,
+                                                  max_iterations=100)
+    assert iterations == 100
+    assert math.isclose(scores[1], 0.5) and math.isclose(scores[2], 0.25)
 
 
 def test_two_opt_delta_agrees_with_full_cycle_length():
@@ -72,11 +91,12 @@ def test_two_opt_delta_agrees_with_full_cycle_length():
 
 def test_set6_cli_reports_both_page_ranks_and_tsp(tmp_path, capsys):
     image = tmp_path / "tour.png"
-    main(["set6", "--walk-steps", "30000", "--iterations", "5000",
-          "--seed", "8", "--draw", str(image)])
+    main(["set6", "--walk-steps", "30000", "--max-it", "50",
+          "--runs", "2", "--seed", "8", "--draw", str(image)])
     output = capsys.readouterr().out
     assert "bledzenie losowe" in output
-    assert "iteracja potegowa" in output
+    assert "iteracja wektora obsadzen" in output
+    assert "I ==> PageRank" in output
     assert "Dlugosc znalezionej trasy" in output
     assert image.stat().st_size > 0
 

@@ -79,12 +79,20 @@ def pagerank_random_walk(graph: Mapping[Node, Sequence[Node]], damping: float = 
 def pagerank_power_iteration(graph: Mapping[Node, Sequence[Node]], damping: float = 0.15,
                              tolerance: float = 1e-12, max_iterations: int = 10_000
                              ) -> tuple[dict[Node, float], int]:
-    """Iteruje rozklad PageRank do zbieznosci; wynik to (ranking, liczba_iteracji)."""
+    """Iteruje wektor obsadzen p_{t+1} = p_t P; wynik to (ranking, liczba_iteracji).
+
+    P_ij = (1 - d) A_ij / d_i + d / n (wierzcholek bez lukow wychodzacych rozdziela
+    prawdopodobienstwo rowno). Gdy wartosci nie zbiegaja (np. d = 0 i graf okresowy),
+    PageRank to srednia wektorow z drugiej polowy iteracji, a zwracana liczba iteracji
+    jest rowna max_iterations.
+    """
     nodes = validate_digraph(graph)
     n = len(nodes)
     if not 0 <= damping <= 1 or tolerance <= 0 or max_iterations < 1:
         raise ValueError("Niepoprawne parametry iteracji PageRank.")
     rank = dict.fromkeys(nodes, 1 / n)
+    average = dict.fromkeys(nodes, 0.0)
+    averaged = 0
     for iteration in range(1, max_iterations + 1):
         updated = dict.fromkeys(nodes, damping / n)
         for source in nodes:
@@ -101,7 +109,11 @@ def pagerank_power_iteration(graph: Mapping[Node, Sequence[Node]], damping: floa
         rank = updated
         if difference < tolerance:
             return rank, iteration
-    return rank, max_iterations
+        if iteration > max_iterations // 2:
+            averaged += 1
+            for node in nodes:
+                average[node] += rank[node]
+    return {node: value / averaged for node, value in average.items()}, max_iterations
 
 
 def ranking(scores: Mapping[Node, float]) -> list[tuple[Node, float]]:

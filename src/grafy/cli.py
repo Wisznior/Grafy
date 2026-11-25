@@ -28,7 +28,7 @@ from grafy.zestaw5.flow_network import draw_flow_network, random_flow_network, v
 from grafy.zestaw5.max_flow import ford_fulkerson
 from grafy.zestaw6.pagerank import (pagerank_power_iteration, pagerank_random_walk,
                                     ranking, read_digraph)
-from grafy.zestaw6.tsp import draw_tour, read_points, simulated_annealing, tour_length
+from grafy.zestaw6.tsp import draw_tour, read_points, simulated_annealing_runs, tour_length
 
 READ = {"matrix": io.read_adjacency_matrix, "list": io.read_adjacency_list,
         "incidence": io.read_incidence_matrix}
@@ -183,20 +183,21 @@ def cmd_set6(a):
     graph = read_digraph(graph_path)
     walk_scores = pagerank_random_walk(graph, a.damping, a.walk_steps, a.seed)
     power_scores, iterations = pagerank_power_iteration(graph, a.damping)
-    print(f"PageRank: bledzenie losowe, krokow = {a.walk_steps}")
+    print(f"PageRank (a): bledzenie losowe z teleportacja, N = {a.walk_steps} krokow")
     for node, score in ranking(walk_scores):
-        print(f"{node} -> PageRank = {score:.6f}")
-    print(f"PageRank: iteracja potegowa, iteracji = {iterations}")
+        print(f"{node} ==> PageRank = {score:.6f}")
+    print(f"PageRank (b): iteracja wektora obsadzen, zbieznosc po {iterations} iteracjach")
     for node, score in ranking(power_scores):
-        print(f"{node} -> PageRank = {score:.6f}")
+        print(f"{node} ==> PageRank = {score:.6f}")
 
     points = read_points(points_path)
     initial = list(range(len(points)))
     initial_length = tour_length(points, initial)
-    tour, length = simulated_annealing(points, a.iterations,
-                                       None if a.seed is None else a.seed + 1,
-                                       initial_tour=initial)
-    print(f"TSP: {len(points)} punktow, dlugosc poczatkowa = {initial_length:.3f}")
+    result = simulated_annealing_runs(points, a.runs, a.max_it,
+                                      None if a.seed is None else a.seed + 1, initial_tour=initial)
+    tour, length = result.tour, result.length
+    print(f"TSP: {len(points)} punktow, dlugosc cyklu poczatkowego = {initial_length:.3f}")
+    print("Dlugosci w kolejnych przebiegach: " + ", ".join(f"{x:.3f}" for x in result.run_lengths))
     print(f"Dlugosc znalezionej trasy = {length:.3f}")
     print("Kolejnosc wierzcholkow (indeksy od 1): " +
           " ".join([*(str(vertex + 1) for vertex in tour), str(tour[0] + 1)]))
@@ -268,7 +269,9 @@ def build_parser():
     sp.add_argument("--points-file", help="plik z dwiema wspolrzednymi na wiersz")
     sp.add_argument("--damping", type=float, default=0.15)
     sp.add_argument("--walk-steps", type=int, default=1_000_000)
-    sp.add_argument("--iterations", type=int, default=200_000, help="liczba prob 2-opt")
+    sp.add_argument("--max-it", type=int, default=2_000,
+                    help="MAX_IT: liczba prob 2-opt dla kazdej ze 100 temperatur T = 0.001 i^2")
+    sp.add_argument("--runs", type=int, default=5, help="liczba przebiegow wyzarzania")
     sp.add_argument("--draw", default="output/zestaw6_tsp.png", metavar="PLIK.png")
     return p
 

@@ -1,7 +1,8 @@
-"""Symulowane wyzarzanie TSP z symetrycznymi ruchami 2-opt."""
+"""Symulowane wyzarzanie TSP (ruchy 2-opt, chlodzenie kwadratowe z alg_6)."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 import math
 from pathlib import Path
 import random
@@ -44,50 +45,101 @@ def two_opt_swap(tour: Sequence[int], first_edge: int, second_edge: int) -> list
     return result
 
 
-def simulated_annealing(points: Sequence[Point], iterations: int = 200_000,
-                        seed: int | None = None, initial_tour: Sequence[int] | None = None,
-                        initial_temperature: float | None = None,
-                        final_temperature: float | None = None
-                        ) -> tuple[list[int], float]:
-    """Zwraca najlepsza znaleziona trase i jej dlugosc.
+def _random_edge_pair(rng: random.Random, n: int) -> tuple[int, int]:
+    """Losuje dwie rozne, niesasiednie krawedzie cyklu: (tour[i], tour[i+1]) i (tour[j], tour[j+1])."""
+    while True:
+        i, j = rng.randrange(n), rng.randrange(n)
+        if i > j:
+            i, j = j, i
+        if j - i >= 2 and not (i == 0 and j == n - 1):
+            return i, j
 
-    Kandydat powstaje ruchem 2-opt. Gorszy ruch jest akceptowany z
-    prawdopodobienstwem exp(-delta/T), a temperatura maleje wykładniczo.
+
+def temperature(i: int) -> float:
+    """Chlodzenie kwadratowe z alg_6: T = 0.001 * i^2 dla i = 100, 99, ..., 1 (od 10 do 0.001)."""
+    return 0.001 * i * i
+
+
+def simulated_annealing(points: Sequence[Point], max_it: int = 2_000,
+                        seed: int | None = None, initial_tour: Sequence[int] | None = None,
+                        trace: list[float] | None = None, trace_points: int = 200
+                        ) -> tuple[list[int], float]:
+    """Algorytm 1 z alg_6; zwraca najlepszy znaleziony cykl i jego dlugosc.
+
+    Petla chlodzenia: i = 100..1, T = 0.001 i^2; dla kazdej temperatury `max_it` prob 2-opt.
+    Krotszy cykl jest przyjmowany zawsze, dluzszy z prawdopodobienstwem exp(-delta/T).
+    Jesli podano `trace`, dopisywane sa do niej dlugosci biezacego cyklu (ok. `trace_points` probek).
     """
     n = len(points)
-    if n < 3 or iterations < 1:
-        raise ValueError("Potrzeba co najmniej 3 punktow i jednej iteracji.")
+    if n < 3 or max_it < 1:
+        raise ValueError("Potrzeba co najmniej 3 punktow i MAX_IT >= 1.")
     rng = random.Random(seed)
     current = list(range(n)) if initial_tour is None else list(initial_tour)
     current_length = tour_length(points, current)
     best, best_length = current.copy(), current_length
-    start_temp = initial_temperature or max(current_length / n, 1.0)
-    end_temp = final_temperature or start_temp * 1e-4
-    if start_temp <= 0 or end_temp <= 0 or end_temp > start_temp:
-        raise ValueError("Temperatury musza byc dodatnie, a koncowa nie moze przewyzszac poczatkowej.")
+    if trace is not None:
+        trace.append(current_length)
     if n < 4:
         return best, best_length
 
-    for step in range(iterations):
-        first = rng.randrange(n)
-        choices = [edge for edge in range(n) if edge > first + 1
-                   and not (first == 0 and edge == n - 1)]
-        if not choices:
-            first = rng.randrange(1, n - 2)
-            choices = list(range(first + 2, n))
-        second = rng.choice(choices)
-        a, b = current[first], current[(first + 1) % n]
-        c, d = current[second], current[(second + 1) % n]
-        delta = (math.dist(points[a], points[c]) + math.dist(points[b], points[d])
-                 - math.dist(points[a], points[b]) - math.dist(points[c], points[d]))
-        fraction = step / max(iterations - 1, 1)
-        temperature = start_temp * (end_temp / start_temp) ** fraction
-        if delta < 0 or rng.random() < math.exp(-delta / temperature):
-            current[first + 1:second + 1] = reversed(current[first + 1:second + 1])
-            current_length += delta
-            if current_length < best_length:
-                best, best_length = current.copy(), current_length
+    every = max(100 * max_it // max(trace_points, 1), 1)
+    step = 0
+    for i in range(100, 0, -1):
+        T = temperature(i)
+        for _ in range(max_it):
+            first, second = _random_edge_pair(rng, n)
+            a, b = current[first], current[first + 1]
+            c, d = current[second], current[(second + 1) % n]
+            delta = (math.dist(points[a], points[c]) + math.dist(points[b], points[d])
+                     - math.dist(points[a], points[b]) - math.dist(points[c], points[d]))
+            if delta < 0 or rng.random() < math.exp(-delta / T):
+                current[first + 1:second + 1] = reversed(current[first + 1:second + 1])
+                current_length += delta
+                if current_length < best_length:
+                    best, best_length = current.copy(), current_length
+            step += 1
+            if trace is not None and step % every == 0:
+                trace.append(current_length)
     return best, tour_length(points, best)
+
+
+@dataclass
+class AnnealingRuns:
+    tour: list[int]
+    length: float
+    run_lengths: list[float]
+    """Dlugosc najlepszej trasy z kazdego przebiegu."""
+    trace: list[float]
+    """Dlugosc biezacej trasy w kolejnych probkach wszystkich przebiegow."""
+    run_starts: list[int]
+    """Indeksy w `trace`, od ktorych zaczyna sie kolejny przebieg."""
+
+
+def simulated_annealing_runs(points: Sequence[Point], runs: int = 5, max_it: int = 2_000,
+                             seed: int | None = None, initial_tour: Sequence[int] | None = None,
+                             start_from_best: bool = True) -> AnnealingRuns:
+    """Powtarza wyzarzanie `runs` razy i zwraca najlepszy cykl.
+
+    Przy `start_from_best` kazdy kolejny przebieg startuje z najlepszego dotychczasowego
+    cyklu, inaczej zawsze z cyklu poczatkowego.
+    """
+    if runs < 1:
+        raise ValueError("Liczba przebiegow musi byc dodatnia.")
+    rng = random.Random(seed)
+    start = list(range(len(points))) if initial_tour is None else list(initial_tour)
+    best, best_length = start, tour_length(points, start)
+    run_lengths: list[float] = []
+    trace: list[float] = []
+    run_starts: list[int] = []
+    for run in range(runs):
+        restart = start_from_best and run > 0
+        run_starts.append(len(trace))
+        tour, length = simulated_annealing(points, max_it, rng.randrange(2 ** 31),
+                                           best if restart else start, trace=trace)
+        run_lengths.append(length)
+        if length < best_length:
+            best, best_length = tour, length
+    return AnnealingRuns(best, best_length, run_lengths, trace, run_starts)
 
 
 def draw_tour(points: Sequence[Point], tour: Sequence[int], out_path) -> None:
